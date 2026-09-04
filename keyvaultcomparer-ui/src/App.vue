@@ -31,6 +31,8 @@ const results = ref<SecretComparisonRow[]>([])
 const loading = ref(false)
 const filter = ref('All')
 const visibleSecrets = ref(new Set<string>())
+const nameFilter = ref('')
+const resultLimit = ref(10)
 
 const toggleVisibility = (secretName: string) => {
   if (visibleSecrets.value.has(secretName)) {
@@ -60,6 +62,13 @@ const fetchProfile = async () => {
 const searchVaults = () => {
   if (debounceTimer) clearTimeout(debounceTimer)
   
+  const query = searchQuery.value.trim()
+  if (query.length < 2) {
+    availableVaults.value = []
+    showDropdown.value = false
+    return
+  }
+
   // Open dropdown immediately while typing
   showDropdown.value = true
   loadingVaults.value = true
@@ -89,11 +98,7 @@ const selectVault = (vault: DiscoveredVault) => {
   selectedVaultUri.value = ''
   searchQuery.value = ''
   showDropdown.value = false
-  
-  // Refetch the full list silently so the dropdown is populated next time it opens
-  fetch('/api/vaults').then(async (res) => {
-    if (res.ok) availableVaults.value = await res.json()
-  }).catch(console.error)
+  availableVaults.value = [] // Clear options until they type again
 }
 
 // Hide dropdown when clicking outside
@@ -103,7 +108,6 @@ const hideDropdown = () => {
 
 onMounted(() => {
   fetchProfile()
-  searchVaults() // initial load
 })
 
 const addVault = () => {
@@ -126,7 +130,11 @@ const fetchComparison = async () => {
     const response = await fetch('/api/compare', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vaultUris: vaultUris.value })
+      body: JSON.stringify({ 
+        vaultUris: vaultUris.value,
+        nameFilter: nameFilter.value,
+        limit: resultLimit.value
+      })
     })
     
     if (response.ok) {
@@ -281,14 +289,37 @@ const getCellClasses = (status: string) => {
         </div>
 
         <div class="mt-6 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6">
-          <button 
-            @click="fetchComparison" 
-            :disabled="loading || vaultUris.length === 0"
-            class="w-full md:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            <svg v-if="loading" class="animate-spin -ml-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-            {{ loading ? 'Comparing...' : 'Compare Vaults' }}
-          </button>
+          <div class="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+            <input 
+              type="text"
+              v-model="nameFilter"
+              placeholder="Regex filter (CSV)..."
+              class="w-full md:w-64 border border-slate-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              @keyup.enter="fetchComparison"
+            />
+            
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-slate-500 font-medium">Limit:</span>
+              <select 
+                v-model="resultLimit"
+                class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option :value="10">10</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+                <option :value="0">All</option>
+              </select>
+            </div>
+
+            <button 
+              @click="fetchComparison" 
+              :disabled="loading || vaultUris.length === 0"
+              class="w-full md:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <svg v-if="loading" class="animate-spin -ml-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              {{ loading ? 'Comparing...' : 'Compare' }}
+            </button>
+          </div>
           
           <div v-if="results.length > 0" class="flex items-center gap-2">
             <span class="text-sm text-slate-500 font-medium">Filter:</span>

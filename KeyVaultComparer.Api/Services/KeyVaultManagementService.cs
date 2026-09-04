@@ -13,6 +13,13 @@ namespace KeyVaultComparer.Api.Services
         public async Task<List<DiscoveredVault>> GetAvailableVaultsAsync(string? query)
         {
             var vaults = new List<DiscoveredVault>();
+            
+            if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2)
+            {
+                // Safety guard: Never query Azure if the search string is too short or empty
+                return vaults;
+            }
+
             var client = new ArmClient(new AzureCliCredential());
 
             try

@@ -5,7 +5,9 @@ namespace KeyVaultComparer.Api.Models
 {
     public class VaultComparisonRequest
     {
-        public List<string> VaultUris { get; set; } = new();
+        public List<string>? VaultUris { get; set; }
+        public string? NameFilter { get; set; }
+        public int Limit { get; set; } = 10;
     }
 
     public class SecretComparisonRow

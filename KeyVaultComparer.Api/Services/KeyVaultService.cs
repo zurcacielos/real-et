@@ -25,15 +25,109 @@ namespace KeyVaultComparer.Api.Services
                 return new List<SecretComparisonRow>();
             }
 
-            var allSecrets = new ConcurrentDictionary<string, SecretComparisonRow>();
-            var tasks = new List<Task>();
-
-            foreach (var uri in request.VaultUris)
+            // Phase 1: Fetch properties from all vaults to get a master list of keys
+            var allPropertyNames = new HashSet<string>();
+            var propTasks = request.VaultUris.Select(async uri =>
             {
-                tasks.Add(FetchSecretsFromVaultAsync(uri, allSecrets));
+                try
+                {
+                    var client = new SecretClient(new Uri(uri), _credential);
+                    await foreach (var secretProp in client.GetPropertiesOfSecretsAsync())
+                    {
+                        if (secretProp.Enabled.GetValueOrDefault())
+                        {
+                            lock (allPropertyNames)
+                            {
+                                allPropertyNames.Add(secretProp.Name);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error fetching properties from {uri}: {ex.Message}");
+                }
+            });
+            await Task.WhenAll(propTasks);
+
+            // Phase 2: Apply Filters and Limits
+            IEnumerable<string> filteredNames = allPropertyNames;
+            
+            if (!string.IsNullOrWhiteSpace(request.NameFilter))
+            {
+                var filters = request.NameFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                
+                filteredNames = filteredNames.Where(name => 
+                {
+                    foreach (var f in filters)
+                    {
+                        try 
+                        {
+                            if (System.Text.RegularExpressions.Regex.IsMatch(name, f, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                                return true;
+                        }
+                        catch 
+                        {
+                            // fallback to literal contains if regex is invalid
+                            if (name.Contains(f, StringComparison.OrdinalIgnoreCase))
+                                return true;
+                        }
+                    }
+                    return false;
+                });
             }
 
-            await Task.WhenAll(tasks);
+            var finalNames = filteredNames.OrderBy(n => n).ToList();
+            if (request.Limit > 0)
+            {
+                finalNames = finalNames.Take(request.Limit).ToList();
+            }
+
+            // Initialize rows
+            var allSecrets = new ConcurrentDictionary<string, SecretComparisonRow>();
+            foreach (var name in finalNames)
+            {
+                allSecrets[name] = new SecretComparisonRow { SecretName = name };
+            }
+
+            // Phase 3: Fetch exact values from all vaults concurrently
+            var fetchTasks = request.VaultUris.Select(async uri =>
+            {
+                try
+                {
+                    var client = new SecretClient(new Uri(uri), _credential);
+                    var vaultFetchTasks = finalNames.Select(async name =>
+                    {
+                        try
+                        {
+                            KeyVaultSecret secret = await client.GetSecretAsync(name);
+                            var row = allSecrets[name];
+                            lock (row.VaultValues)
+                            {
+                                row.VaultValues[uri] = new SecretValueStatus
+                                {
+                                    Value = secret.Value,
+                                    Status = "Present"
+                                };
+                            }
+                        }
+                        catch (Azure.RequestFailedException ex) when (ex.Status == 404)
+                        {
+                            // Secret not found in this specific vault
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error fetching secret {name} from {uri}: {ex.Message}");
+                        }
+                    });
+                    await Task.WhenAll(vaultFetchTasks);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error creating client for {uri}: {ex.Message}");
+                }
+            });
+            await Task.WhenAll(fetchTasks);
 
             // Compute global status and ColorIndex for each row
             var results = allSecrets.Values.OrderBy(s => s.SecretName).ToList();
@@ -71,58 +165,6 @@ namespace KeyVaultComparer.Api.Services
             }
 
             return results;
-        }
-
-        private async Task FetchSecretsFromVaultAsync(string vaultUri, ConcurrentDictionary<string, SecretComparisonRow> allSecrets)
-        {
-            try
-            {
-                var client = new SecretClient(new Uri(vaultUri), _credential);
-                
-                // Fetch all properties (keys) first
-                var secretProperties = new List<SecretProperties>();
-                await foreach (var secretProp in client.GetPropertiesOfSecretsAsync())
-                {
-                    if (secretProp.Enabled.GetValueOrDefault())
-                    {
-                        secretProperties.Add(secretProp);
-                    }
-                }
-
-                // Fetch the actual values in parallel (be careful with rate limits if vault is huge, but fine for local tool)
-                var fetchTasks = secretProperties.Select(async prop => 
-                {
-                    try 
-                    {
-                        KeyVaultSecret secret = await client.GetSecretAsync(prop.Name);
-                        
-                        var row = allSecrets.GetOrAdd(prop.Name, name => new SecretComparisonRow 
-                        { 
-                            SecretName = name 
-                        });
-
-                        lock (row.VaultValues)
-                        {
-                            row.VaultValues[vaultUri] = new SecretValueStatus 
-                            { 
-                                Value = secret.Value, 
-                                Status = "Present" 
-                            };
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // Handle access denied or other errors for individual secrets
-                    }
-                });
-
-                await Task.WhenAll(fetchTasks);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error fetching from {vaultUri}: {ex.Message}");
-                // In a real app, we might return this error to the UI
-            }
         }
 
         private string ComputeGlobalStatus(IEnumerable<SecretValueStatus> statuses)
