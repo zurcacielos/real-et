@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using Azure.Identity;
 using Azure.ResourceManager;
 using Azure.ResourceManager.KeyVault;
+using Azure.ResourceManager.ResourceGraph;
+using Azure.ResourceManager.ResourceGraph.Models;
 using KeyVaultComparer.Api.Models;
 
 namespace KeyVaultComparer.Api.Services
@@ -24,43 +26,58 @@ namespace KeyVaultComparer.Api.Services
 
             try
             {
-                var subscriptions = client.GetSubscriptions();
-                var subCount = 0;
-                await foreach (var sub in subscriptions.GetAllAsync())
+                var tenant = client.GetTenants().First();
+
+                // Build KQL Query for Azure Resource Graph
+                var queryBuilder = new System.Text.StringBuilder();
+                queryBuilder.AppendLine("Resources");
+                queryBuilder.AppendLine("| where type =~ 'microsoft.keyvault/vaults'");
+                
+                // Server-side text filtering
+                if (!string.IsNullOrWhiteSpace(query))
                 {
-                    if (!string.IsNullOrWhiteSpace(subscriptionId) && sub.Data.SubscriptionId != subscriptionId)
-                    {
-                        continue;
-                    }
+                    // Escape single quotes for safety
+                    var safeQuery = query.Replace("'", @"\'");
+                    queryBuilder.AppendLine($"| where name contains '{safeQuery}'");
+                }
+                
+                queryBuilder.AppendLine("| project name, properties.vaultUri");
+                queryBuilder.AppendLine("| take 100");
 
-                    subCount++;
-                    Console.WriteLine($"Found subscription: {sub.Data.DisplayName} ({sub.Data.SubscriptionId})");
-                    var vaultCount = 0;
-                    await foreach (var vault in sub.GetKeyVaultsAsync())
-                    {
-                        if (vaults.Count >= 100) break;
+                var queryContent = new ResourceQueryContent(queryBuilder.ToString());
 
-                        if (vault.Data.Properties.VaultUri != null)
+                // Apply subscription filter natively to ARG
+                if (!string.IsNullOrWhiteSpace(subscriptionId))
+                {
+                    queryContent.Subscriptions.Add(subscriptionId);
+                }
+
+                var response = await tenant.GetResourcesAsync(queryContent);
+                
+                if (response.Value != null && response.Value.Data != null)
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(response.Value.Data);
+                    foreach (var item in doc.RootElement.EnumerateArray())
+                    {
+                        var name = item.GetProperty("name").GetString();
+                        
+                        var props = item.GetProperty("properties");
+                        var vaultUri = props.TryGetProperty("vaultUri", out var uriProp) ? uriProp.GetString() : null;
+
+                        if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(vaultUri))
                         {
-                            var vaultName = vault.Data.Name;
-                            if (!string.IsNullOrWhiteSpace(query) && !vaultName.Contains(query, StringComparison.OrdinalIgnoreCase))
-                            {
-                                continue;
-                            }
                             vaults.Add(new DiscoveredVault
                             {
-                                Name = vault.Data.Name,
-                                Uri = vault.Data.Properties.VaultUri.ToString()
+                                Name = name,
+                                Uri = vaultUri
                             });
                         }
                     }
-                    Console.WriteLine($"Found {vaultCount} vaults in subscription.");
                 }
-                Console.WriteLine($"Total subscriptions checked: {subCount}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error fetching vaults: {ex.Message}");
+                Console.WriteLine($"Error fetching vaults from Resource Graph: {ex.Message}");
             }
 
             return vaults;
