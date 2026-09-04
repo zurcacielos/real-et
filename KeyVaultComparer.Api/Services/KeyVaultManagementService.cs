@@ -10,7 +10,7 @@ namespace KeyVaultComparer.Api.Services
 {
     public class KeyVaultManagementService
     {
-        public async Task<List<DiscoveredVault>> GetAvailableVaultsAsync(string? query)
+        public async Task<List<DiscoveredVault>> GetAvailableVaultsAsync(string? query, string? subscriptionId = null)
         {
             var vaults = new List<DiscoveredVault>();
             
@@ -28,6 +28,11 @@ namespace KeyVaultComparer.Api.Services
                 var subCount = 0;
                 await foreach (var sub in subscriptions.GetAllAsync())
                 {
+                    if (!string.IsNullOrWhiteSpace(subscriptionId) && sub.Data.SubscriptionId != subscriptionId)
+                    {
+                        continue;
+                    }
+
                     subCount++;
                     Console.WriteLine($"Found subscription: {sub.Data.DisplayName} ({sub.Data.SubscriptionId})");
                     var vaultCount = 0;
@@ -59,6 +64,28 @@ namespace KeyVaultComparer.Api.Services
             }
 
             return vaults;
+        }
+
+        public async Task<List<AzureSubscription>> GetSubscriptionsAsync()
+        {
+            var subs = new List<AzureSubscription>();
+            try
+            {
+                var client = new ArmClient(new AzureCliCredential());
+                await foreach (var sub in client.GetSubscriptions().GetAllAsync())
+                {
+                    subs.Add(new AzureSubscription
+                    {
+                        Id = sub.Data.SubscriptionId,
+                        Name = sub.Data.DisplayName
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error fetching subscriptions: {ex.Message}");
+            }
+            return subs;
         }
     }
 }

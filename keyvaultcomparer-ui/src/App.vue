@@ -34,6 +34,14 @@ const visibleSecrets = ref(new Set<string>())
 const nameFilter = ref('')
 const resultLimit = ref(10)
 
+const subscriptions = ref<Array<{id: string, name: string}>>([])
+const selectedSubscriptionId = ref(localStorage.getItem('selectedSub') || '')
+
+watch(selectedSubscriptionId, (newId) => {
+  localStorage.setItem('selectedSub', newId)
+  availableVaults.value = [] // Clear old vault options since the sub changed
+})
+
 const toggleVisibility = (secretName: string) => {
   if (visibleSecrets.value.has(secretName)) {
     visibleSecrets.value.delete(secretName)
@@ -59,6 +67,17 @@ const fetchProfile = async () => {
   }
 }
 
+const fetchSubscriptions = async () => {
+  try {
+    const response = await fetch('/api/subscriptions')
+    if (response.ok) {
+      subscriptions.value = await response.json()
+    }
+  } catch (error) {
+    console.error('Failed to fetch subscriptions', error)
+  }
+}
+
 const searchVaults = () => {
   if (debounceTimer) clearTimeout(debounceTimer)
   
@@ -75,7 +94,11 @@ const searchVaults = () => {
 
   debounceTimer = setTimeout(async () => {
     try {
-      const response = await fetch(`/api/vaults?query=${encodeURIComponent(searchQuery.value)}`)
+      let url = `/api/vaults?query=${encodeURIComponent(searchQuery.value)}`
+      if (selectedSubscriptionId.value) {
+        url += `&subscriptionId=${encodeURIComponent(selectedSubscriptionId.value)}`
+      }
+      const response = await fetch(url)
       if (response.ok) {
         availableVaults.value = await response.json()
       }
@@ -108,6 +131,7 @@ const hideDropdown = () => {
 
 onMounted(() => {
   fetchProfile()
+  fetchSubscriptions()
 })
 
 const addVault = () => {
@@ -203,9 +227,17 @@ const getCellClasses = (status: string) => {
         </div>
 
         <div class="flex items-center gap-4 bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200" v-if="profile">
-          <div class="text-right">
-            <p class="text-xs text-slate-500 font-medium uppercase tracking-wider">Active Subscription</p>
-            <p class="text-sm font-semibold text-slate-800">{{ profile.subscriptionName }}</p>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-500 font-medium uppercase tracking-wider hidden sm:block">Subscription:</span>
+            <select 
+              v-model="selectedSubscriptionId"
+              class="border border-slate-300 rounded-md px-2 py-1 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 sm:w-64 truncate bg-slate-50"
+            >
+              <option value="">All Subscriptions</option>
+              <option v-for="sub in subscriptions" :key="sub.id" :value="sub.id">
+                {{ sub.name }}
+              </option>
+            </select>
           </div>
           <div class="h-8 w-px bg-slate-200"></div>
           <div 

@@ -39,9 +39,9 @@ app.MapPost("/api/compare", async ([FromBody] VaultComparisonRequest request, Ke
 })
 .WithName("CompareVaults");
 
-app.MapGet("/api/vaults", async ([FromQuery] string? query, KeyVaultManagementService service) =>
+app.MapGet("/api/vaults", async ([FromQuery] string? query, [FromQuery] string? subscriptionId, KeyVaultManagementService service) =>
 {
-    var vaults = await service.GetAvailableVaultsAsync(query);
+    var vaults = await service.GetAvailableVaultsAsync(query, subscriptionId);
     return Results.Ok(vaults);
 })
 .WithName("GetVaults");
@@ -52,5 +52,12 @@ app.MapGet("/api/profile", async (ProfileService service) =>
     return Results.Ok(profile);
 })
 .WithName("GetProfile");
+
+app.MapGet("/api/subscriptions", async (KeyVaultManagementService service) =>
+{
+    var subs = await service.GetSubscriptionsAsync();
+    return Results.Ok(subs);
+})
+.WithName("GetSubscriptions");
 
 app.Run();
