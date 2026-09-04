@@ -7,6 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddOpenApi();
 builder.Services.AddSingleton<KeyVaultService>();
+builder.Services.AddSingleton<KeyVaultManagementService>();
+builder.Services.AddSingleton<ProfileService>();
 
 // Enable CORS for Vue dev server
 builder.Services.AddCors(options =>
@@ -36,5 +38,19 @@ app.MapPost("/api/compare", async ([FromBody] VaultComparisonRequest request, Ke
     return Results.Ok(result);
 })
 .WithName("CompareVaults");
+
+app.MapGet("/api/vaults", async ([FromQuery] string? query, KeyVaultManagementService service) =>
+{
+    var vaults = await service.GetAvailableVaultsAsync(query);
+    return Results.Ok(vaults);
+})
+.WithName("GetVaults");
+
+app.MapGet("/api/profile", async (ProfileService service) =>
+{
+    var profile = await service.GetProfileAsync();
+    return Results.Ok(profile);
+})
+.WithName("GetProfile");
 
 app.Run();

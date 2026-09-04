@@ -26,5 +26,12 @@ namespace KeyVaultComparer.Api.Models
         /// "Match", "Mismatch", "Missing"
         /// </summary>
         public string Status { get; set; } = "Missing";
+        public int ColorIndex { get; set; } = 0;
+    }
+
+    public class DiscoveredVault
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Uri { get; set; } = string.Empty;
     }
 }

@@ -35,7 +35,7 @@ namespace KeyVaultComparer.Api.Services
 
             await Task.WhenAll(tasks);
 
-            // Compute global status for each row
+            // Compute global status and ColorIndex for each row
             var results = allSecrets.Values.OrderBy(s => s.SecretName).ToList();
             foreach (var row in results)
             {
@@ -44,7 +44,26 @@ namespace KeyVaultComparer.Api.Services
                 {
                     if (!row.VaultValues.ContainsKey(uri))
                     {
-                        row.VaultValues[uri] = new SecretValueStatus { Status = "Missing", Value = null };
+                        row.VaultValues[uri] = new SecretValueStatus { Status = "Missing", Value = null, ColorIndex = 0 };
+                    }
+                }
+
+                // Compute ColorIndex
+                var distinctValues = row.VaultValues.Values
+                    .Where(v => v.Status != "Missing" && v.Value != null)
+                    .Select(v => v.Value)
+                    .Distinct()
+                    .ToList();
+
+                foreach (var status in row.VaultValues.Values)
+                {
+                    if (status.Status == "Missing" || status.Value == null)
+                    {
+                        status.ColorIndex = 0;
+                    }
+                    else
+                    {
+                        status.ColorIndex = distinctValues.IndexOf(status.Value) + 1;
                     }
                 }
 
