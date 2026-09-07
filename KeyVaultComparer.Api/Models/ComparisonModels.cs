@@ -10,6 +10,12 @@ namespace KeyVaultComparer.Api.Models
         public int Limit { get; set; } = 10;
     }
 
+    public class SecretValuesRequest
+    {
+        public string VaultUri { get; set; } = string.Empty;
+        public List<string> SecretNames { get; set; } = new();
+    }
+
     public class SecretComparisonRow
     {
         public string SecretName { get; set; } = string.Empty;

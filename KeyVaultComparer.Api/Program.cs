@@ -1,3 +1,5 @@
+using Azure.Core;
+using Azure.Identity;
 using KeyVaultComparer.Api.Models;
 using KeyVaultComparer.Api.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +8,14 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddOpenApi();
+
+// Register the global TokenCredential
+builder.Services.AddSingleton<TokenCredential>(sp => 
+{
+    // Use AzureCliCredential as the Single Source of Truth for local dev
+    return new AzureCliCredential();
+});
+
 builder.Services.AddSingleton<KeyVaultService>();
 builder.Services.AddSingleton<KeyVaultManagementService>();
 builder.Services.AddSingleton<ProfileService>();
@@ -32,12 +42,19 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors();
 
-app.MapPost("/api/compare", async ([FromBody] VaultComparisonRequest request, KeyVaultService service) =>
+app.MapPost("/api/vaults/keys", async ([FromBody] List<string> vaultUris, KeyVaultService service) =>
 {
-    var result = await service.CompareVaultsAsync(request);
+    var result = await service.GetAllSecretNamesAsync(vaultUris);
     return Results.Ok(result);
 })
-.WithName("CompareVaults");
+.WithName("GetVaultKeys");
+
+app.MapPost("/api/vault/values", async ([FromBody] SecretValuesRequest request, KeyVaultService service) =>
+{
+    var result = await service.GetSecretValuesAsync(request.VaultUri, request.SecretNames);
+    return Results.Ok(result);
+})
+.WithName("GetVaultValues");
 
 app.MapGet("/api/vaults", async ([FromQuery] string? query, [FromQuery] string? subscriptionId, KeyVaultManagementService service) =>
 {

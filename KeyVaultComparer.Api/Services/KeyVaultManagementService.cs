@@ -12,6 +12,12 @@ namespace KeyVaultComparer.Api.Services
 {
     public class KeyVaultManagementService
     {
+        private readonly Azure.Core.TokenCredential _credential;
+
+        public KeyVaultManagementService(Azure.Core.TokenCredential credential)
+        {
+            _credential = credential;
+        }
         public async Task<List<DiscoveredVault>> GetAvailableVaultsAsync(string? query, string? subscriptionId = null)
         {
             var vaults = new List<DiscoveredVault>();
@@ -22,7 +28,7 @@ namespace KeyVaultComparer.Api.Services
                 return vaults;
             }
 
-            var client = new ArmClient(new AzureCliCredential());
+            var client = new ArmClient(_credential);
 
             try
             {
@@ -56,13 +62,15 @@ namespace KeyVaultComparer.Api.Services
                 
                 if (response.Value != null && response.Value.Data != null)
                 {
+                    var rawJson = response.Value.Data.ToString();
+                    Console.WriteLine("RAW ARG JSON:");
+                    Console.WriteLine(rawJson);
+                    
                     using var doc = System.Text.Json.JsonDocument.Parse(response.Value.Data);
                     foreach (var item in doc.RootElement.EnumerateArray())
                     {
-                        var name = item.GetProperty("name").GetString();
-                        
-                        var props = item.GetProperty("properties");
-                        var vaultUri = props.TryGetProperty("vaultUri", out var uriProp) ? uriProp.GetString() : null;
+                        var name = item.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
+                        var vaultUri = item.TryGetProperty("properties_vaultUri", out var uriProp) ? uriProp.GetString() : null;
 
                         if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(vaultUri))
                         {
@@ -88,7 +96,7 @@ namespace KeyVaultComparer.Api.Services
             var subs = new List<AzureSubscription>();
             try
             {
-                var client = new ArmClient(new AzureCliCredential());
+                var client = new ArmClient(_credential);
                 await foreach (var sub in client.GetSubscriptions().GetAllAsync())
                 {
                     subs.Add(new AzureSubscription

@@ -1,13 +1,23 @@
 using System;
-using System.Diagnostics;
+using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Azure.Core;
+using Azure.ResourceManager;
 using KeyVaultComparer.Api.Models;
 
 namespace KeyVaultComparer.Api.Services
 {
     public class ProfileService
     {
+        private readonly TokenCredential _credential;
+
+        public ProfileService(TokenCredential credential)
+        {
+            _credential = credential;
+        }
+
         public async Task<UserProfile> GetProfileAsync()
         {
             var profile = new UserProfile
@@ -19,40 +29,51 @@ namespace KeyVaultComparer.Api.Services
 
             try
             {
-                var processInfo = new ProcessStartInfo("cmd.exe", "/c az account show -o json")
-                {
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
+                // 1. Get the default subscription name using ArmClient
+                var armClient = new ArmClient(_credential);
+                var defaultSub = await armClient.GetDefaultSubscriptionAsync();
+                profile.SubscriptionName = defaultSub.Data.DisplayName ?? profile.SubscriptionName;
 
-                using var process = Process.Start(processInfo);
-                if (process != null)
+                // 2. Extract email from Token JWT
+                var tokenRequest = new TokenRequestContext(new[] { "https://management.azure.com/.default" });
+                var token = await _credential.GetTokenAsync(tokenRequest, new System.Threading.CancellationToken());
+                
+                var jwtParts = token.Token.Split('.');
+                if (jwtParts.Length >= 2)
                 {
-                    string output = await process.StandardOutput.ReadToEndAsync();
-                    await process.WaitForExitAsync();
-
-                    if (!string.IsNullOrWhiteSpace(output))
+                    // Fix Base64Url padding for the payload
+                    var payloadStr = jwtParts[1];
+                    payloadStr = payloadStr.Replace('-', '+').Replace('_', '/');
+                    switch (payloadStr.Length % 4)
                     {
-                        using var doc = JsonDocument.Parse(output);
-                        var root = doc.RootElement;
-                        
-                        if (root.TryGetProperty("name", out var subName))
-                        {
-                            profile.SubscriptionName = subName.GetString() ?? profile.SubscriptionName;
-                        }
-                        
-                        if (root.TryGetProperty("user", out var userObj) && userObj.TryGetProperty("name", out var userName))
-                        {
-                            profile.Email = userName.GetString() ?? profile.Email;
-                            profile.Initials = GetInitials(profile.Email);
-                        }
+                        case 2: payloadStr += "=="; break;
+                        case 3: payloadStr += "="; break;
+                    }
+
+                    var payloadBytes = Convert.FromBase64String(payloadStr);
+                    var payloadJson = Encoding.UTF8.GetString(payloadBytes);
+
+                    using var doc = JsonDocument.Parse(payloadJson);
+                    var root = doc.RootElement;
+                    
+                    string? email = null;
+                    if (root.TryGetProperty("upn", out var upnProp))
+                        email = upnProp.GetString();
+                    else if (root.TryGetProperty("email", out var emailProp))
+                        email = emailProp.GetString();
+                    else if (root.TryGetProperty("unique_name", out var uniqueNameProp))
+                        email = uniqueNameProp.GetString();
+
+                    if (!string.IsNullOrWhiteSpace(email))
+                    {
+                        profile.Email = email;
+                        profile.Initials = GetInitials(email);
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error fetching profile: {ex.Message}");
+                Console.WriteLine($"Error fetching profile via injected credential: {ex.Message}");
             }
 
             return profile;

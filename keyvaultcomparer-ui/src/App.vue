@@ -4,6 +4,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 interface SecretValueStatus {
   value: string | null;
   status: string;
+  identiconEmoji?: string;
 }
 
 interface SecretComparisonRow {
@@ -23,16 +24,265 @@ interface UserProfile {
   initials: string;
 }
 
+interface SecuritySettings {
+  minLength: number;
+  ignoreValues: string[];
+  includeKeyKeywords: string[];
+}
+
+const defaultSecuritySettings: SecuritySettings = {
+  minLength: 15,
+  ignoreValues: ['true', 'false', '0', '1', 'null', 'undefined', ''],
+  includeKeyKeywords: ['salt', 'key', 'token', 'password', 'secret', 'pwd']
+};
+
+interface UiSettings {
+  identiconsByRow: boolean;
+  identiconsByCol: boolean;
+  identicolorMode: 'ByRow' | 'None';
+  statusFilter: string;
+  securityByRow: boolean;
+  securityByCol: boolean;
+}
+
+const defaultUiSettings: UiSettings = {
+  identiconsByRow: true,
+  identiconsByCol: true,
+  identicolorMode: 'ByRow',
+  statusFilter: 'Any',
+  securityByRow: false,
+  securityByCol: false
+};
+
+const identiconEmojis = ['⚽', '🚗', '🚀', '🍎', '🍕', '💎', '🎲', '🎸', '🌈', '🔥', '🪐', '🦄', '🌵', '🍔', '🎨', '🧩', '🎈', '🔋', '🔮', '🧬'];
+
+const hashString = (str: string) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
 const profile = ref<UserProfile | null>(null)
-const vaultUris = ref<string[]>([])
+
+const loadSavedVaultUris = (): string[] => {
+  try {
+    const saved = localStorage.getItem('savedVaultUris');
+    return saved ? JSON.parse(saved) : [];
+  } catch (e) { return []; }
+};
+const vaultUris = ref<string[]>(loadSavedVaultUris())
+watch(vaultUris, (newVal) => {
+  localStorage.setItem('savedVaultUris', JSON.stringify(newVal));
+}, { deep: true });
 const availableVaults = ref<DiscoveredVault[]>([])
 const loadingVaults = ref(false)
-const results = ref<SecretComparisonRow[]>([])
+const results = computed<SecretComparisonRow[]>(() => {
+  const filtered = filteredNames.value;
+  if (resultLimit.value > 0) {
+    // We limit after filtering
+  }
+  
+  return filtered.slice(0, resultLimit.value > 0 ? resultLimit.value : undefined).map(name => {
+    const row: SecretComparisonRow = {
+      secretName: name,
+      vaultValues: {},
+      globalStatus: 'Missing'
+    };
+    
+    vaultUris.value.forEach(uri => {
+      const knownNamesForVault = knownSecretNames.value[uri] || [];
+      if (!knownNamesForVault.includes(name)) {
+        row.vaultValues[uri] = { status: 'Missing', value: null, colorIndex: 0, isVulnerable: false };
+      } else {
+        const d = vaultData.value[uri]?.[name];
+        row.vaultValues[uri] = d ? { ...d, colorIndex: 0, isVulnerable: false } : { status: 'Not Retrieved', value: null, colorIndex: 0, isVulnerable: false };
+      }
+      
+      // Calculate identicons based on dimension logic
+      const valStr = row.vaultValues[uri].value as string | null;
+      if (valStr && !securitySettings.value.ignoreValues.includes(valStr.toLowerCase())) {
+        let hashKey = '';
+        let isDuplicated = false;
+
+        if (uiSettings.value.identiconsByRow && uiSettings.value.identiconsByCol) {
+          hashKey = valStr;
+          isDuplicated = globalUsageCount.value.get(valStr)! > 1;
+        } else if (uiSettings.value.identiconsByRow) {
+          hashKey = name + valStr;
+          isDuplicated = rowUsageCount.value.get(hashKey)! > 1;
+        } else if (uiSettings.value.identiconsByCol) {
+          hashKey = uri + valStr;
+          isDuplicated = colUsageCount.value.get(hashKey)! > 1;
+        }
+
+        if (isDuplicated) {
+          const hash = hashString(hashKey);
+          row.vaultValues[uri].identiconEmoji = identiconEmojis[hash % identiconEmojis.length];
+        }
+      }
+
+      // Check vulnerability
+      if (valStr && vulnerableValuesMap.value.has(valStr)) {
+        row.vaultValues[uri].isVulnerable = true;
+        const usages = vulnerableValuesMap.value.get(valStr);
+        row.vaultValues[uri].vulnerableTooltip = `Reused in ${usages?.length} secrets: ${usages?.join(', ')}. Click to highlight occurrences.`;
+      }
+    });
+
+    // Compute color index based on distinct values
+    const distinctValues = Object.values(row.vaultValues)
+      .filter(v => v.status !== 'Missing' && v.status !== 'Not Retrieved' && v.status !== 'Error' && v.status !== 'Loading' && v.value !== null)
+      .map(v => v.value)
+      .filter((v, i, a) => a.indexOf(v) === i);
+
+    Object.values(row.vaultValues).forEach(status => {
+      if (status.status !== 'Present' || status.value === null) {
+        status.colorIndex = 0;
+      } else {
+        status.colorIndex = distinctValues.indexOf(status.value) + 1;
+      }
+    });
+
+    // Compute global status
+    const statuses = Object.values(row.vaultValues);
+    if (statuses.some(s => s.status === 'Missing')) {
+      row.globalStatus = 'Missing';
+    } else if (statuses.some(s => s.status !== 'Present' && s.status !== 'Match' && s.status !== 'Mismatch')) {
+      row.globalStatus = 'Incomplete';
+    } else {
+      const firstValue = statuses.find(s => s.status === 'Present')?.value;
+      if (firstValue !== undefined && statuses.every(s => s.value === firstValue)) {
+        row.globalStatus = 'Match';
+      } else {
+        row.globalStatus = 'Mismatch';
+      }
+    }
+
+    return row;
+  });
+})
+
+const loadUiSettings = (): UiSettings => {
+  try {
+    const stored = localStorage.getItem('uiSettings');
+    if (stored) return { ...defaultUiSettings, ...JSON.parse(stored) };
+  } catch (e) { console.error('Failed to parse UI settings', e); }
+  return defaultUiSettings;
+};
+const uiSettings = ref<UiSettings>(loadUiSettings());
+watch(uiSettings, (newVal) => {
+  localStorage.setItem('uiSettings', JSON.stringify(newVal));
+}, { deep: true });
+
 const loading = ref(false)
-const filter = ref('All')
 const visibleSecrets = ref(new Set<string>())
 const nameFilter = ref('')
 const resultLimit = ref(10)
+
+const highlightedValue = ref<string | null>(null)
+const toggleHighlight = (val: string | null | undefined) => {
+  if (!val) return
+  highlightedValue.value = highlightedValue.value === val ? null : val
+}
+
+const loadKnownSecretNames = (): Record<string, string[]> => {
+  try {
+    const saved = localStorage.getItem('savedKnownSecretNames');
+    return saved ? JSON.parse(saved) : {};
+  } catch (e) { return {}; }
+};
+const knownSecretNames = ref<Record<string, string[]>>(loadKnownSecretNames())
+watch(knownSecretNames, (newVal) => {
+  localStorage.setItem('savedKnownSecretNames', JSON.stringify(newVal));
+}, { deep: true });
+const vaultData = ref<Record<string, Record<string, SecretValueStatus & { colorIndex?: number }>>>({})
+
+const loadSecuritySettings = (): SecuritySettings => {
+  try {
+    const stored = localStorage.getItem('securitySettings');
+    if (stored) return JSON.parse(stored);
+  } catch (e) { console.error('Failed to parse security settings', e); }
+  return defaultSecuritySettings;
+};
+const securitySettings = ref<SecuritySettings>(loadSecuritySettings());
+watch(securitySettings, (newVal) => {
+  localStorage.setItem('securitySettings', JSON.stringify(newVal));
+}, { deep: true });
+
+const vulnerableValuesMap = computed(() => {
+  const valueMap = new Map<string, Set<string>>(); // value -> Set of secretNames
+  
+  // Build value map
+  for (const uri of Object.keys(vaultData.value)) {
+    for (const [name, status] of Object.entries(vaultData.value[uri])) {
+      if (status.status === 'Present' && status.value) {
+        if (!valueMap.has(status.value)) valueMap.set(status.value, new Set());
+        valueMap.get(status.value)!.add(name);
+      }
+    }
+  }
+
+  const vulnerable = new Map<string, string[]>();
+  const settings = securitySettings.value;
+  
+  for (const [val, names] of valueMap.entries()) {
+    if (names.size > 1) { // It's reused
+      const lowerVal = val.toLowerCase();
+      if (settings.ignoreValues.includes(lowerVal)) continue;
+
+      const hasCriticalName = Array.from(names).some(name => {
+        const lowerName = name.toLowerCase();
+        return settings.includeKeyKeywords.some(kw => lowerName.includes(kw));
+      });
+
+      if (val.length >= settings.minLength || hasCriticalName) {
+        vulnerable.set(val, Array.from(names));
+      }
+    }
+  }
+  return vulnerable;
+});
+
+const globalUsageCount = computed(() => {
+  const counts = new Map<string, number>();
+  for (const uri of Object.keys(vaultData.value)) {
+    for (const status of Object.values(vaultData.value[uri])) {
+      if (status.status === 'Present' && status.value) {
+        counts.set(status.value, (counts.get(status.value) || 0) + 1);
+      }
+    }
+  }
+  return counts;
+});
+
+const rowUsageCount = computed(() => {
+  const counts = new Map<string, number>();
+  for (const uri of Object.keys(vaultData.value)) {
+    for (const [name, status] of Object.entries(vaultData.value[uri])) {
+      if (status.status === 'Present' && status.value) {
+        const key = name + status.value;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+  }
+  return counts;
+});
+
+const colUsageCount = computed(() => {
+  const counts = new Map<string, number>();
+  for (const uri of Object.keys(vaultData.value)) {
+    for (const status of Object.values(vaultData.value[uri])) {
+      if (status.status === 'Present' && status.value) {
+        const key = uri + status.value;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    }
+  }
+  return counts;
+});
 
 const subscriptions = ref<Array<{id: string, name: string}>>([])
 const selectedSubscriptionId = ref(localStorage.getItem('selectedSub') || '')
@@ -40,6 +290,88 @@ const selectedSubscriptionId = ref(localStorage.getItem('selectedSub') || '')
 watch(selectedSubscriptionId, (newId) => {
   localStorage.setItem('selectedSub', newId)
   availableVaults.value = [] // Clear old vault options since the sub changed
+})
+
+const fetchComparison = async () => {
+  if (vaultUris.value.length === 0) return
+  
+  loading.value = true
+  try {
+    const tasks = vaultUris.value.map(uri => fetchValuesForVault(uri))
+    await Promise.all(tasks)
+  } catch (error) {
+    console.error('Error fetching comparison:', error)
+    alert('Failed to fetch comparison data. Please try again.')
+  } finally {
+    loading.value = false
+  }
+}
+
+const refetchNames = async () => {
+  if (vaultUris.value.length === 0) return;
+  loading.value = true;
+  try {
+    const response = await fetch('/api/vaults/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(vaultUris.value)
+    });
+    if (!response.ok) throw new Error('Failed to fetch keys');
+    const data = await response.json();
+    
+    for (const [uri, names] of Object.entries(data)) {
+      knownSecretNames.value[uri] = names as string[];
+    }
+  } catch (error) {
+    console.error('Error fetching names:', error);
+    alert('Failed to fetch secret names. Please try again.');
+  } finally {
+    loading.value = false;
+  }
+}
+
+const fetchVaultKeys = async () => {
+  if (vaultUris.value.length === 0) {
+    knownSecretNames.value = {};
+    return;
+  }
+  try {
+    const response = await fetch('/api/vaults/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(vaultUris.value)
+    });
+    if (response.ok) {
+      knownSecretNames.value = await response.json();
+    }
+  } catch (error) {
+    console.error('Failed to fetch keys', error);
+  }
+}
+
+watch(vaultUris, () => {
+  fetchVaultKeys();
+}, { deep: true })
+
+const filteredNames = computed(() => {
+  const set = new Set<string>();
+  Object.values(knownSecretNames.value).flat().forEach(n => set.add(n));
+  let names = Array.from(set).sort();
+
+  if (nameFilter.value.trim()) {
+    const filters = nameFilter.value.split(',').map(f => f.trim()).filter(f => f);
+    names = names.filter(name => {
+      for (const f of filters) {
+        try {
+          if (new RegExp(f, 'i').test(name)) return true;
+        } catch {
+          if (name.toLowerCase().includes(f.toLowerCase())) return true;
+        }
+      }
+      return false;
+    });
+  }
+  return names;
 })
 
 const toggleVisibility = (secretName: string) => {
@@ -119,9 +451,7 @@ const selectVault = (vault: DiscoveredVault) => {
     vaultUris.value.push(vault.uri)
   }
   selectedVaultUri.value = ''
-  searchQuery.value = ''
-  showDropdown.value = false
-  availableVaults.value = [] // Clear options until they type again
+  // Focus remains and dropdown can stay open to select more, or close on blur/esc
 }
 
 // Hide dropdown when clicking outside
@@ -146,36 +476,68 @@ const removeVault = (index: number) => {
   vaultUris.value.splice(index, 1)
 }
 
-const fetchComparison = async () => {
-  if (vaultUris.value.length === 0) return
+const fetchValuesForVault = async (uri: string) => {
+  if (!vaultData.value[uri]) {
+    vaultData.value[uri] = {};
+  }
   
-  loading.value = true
+  // Set status to loading for visible names
+  const namesToFetch = filteredNames.value.slice(0, resultLimit.value > 0 ? resultLimit.value : undefined);
+  namesToFetch.forEach(name => {
+    vaultData.value[uri][name] = { value: null, status: 'Loading' };
+  });
+
   try {
-    const response = await fetch('/api/compare', {
+    const response = await fetch('/api/vault/values', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        vaultUris: vaultUris.value,
-        nameFilter: nameFilter.value,
-        limit: resultLimit.value
+        vaultUri: uri,
+        secretNames: namesToFetch
       })
     })
     
     if (response.ok) {
-      results.value = await response.json()
+      const data = await response.json()
+      // Merge with existing
+      vaultData.value[uri] = { ...vaultData.value[uri], ...data }
     } else {
-      console.error('Failed to fetch comparison')
+      console.error('Failed to fetch values for vault', uri)
     }
   } catch (error) {
     console.error(error)
-  } finally {
-    loading.value = false
   }
 }
 
+
 const filteredResults = computed(() => {
-  if (filter.value === 'All') return results.value
-  return results.value.filter(r => r.globalStatus === filter.value)
+  let res = results.value;
+  if (uiSettings.value.statusFilter !== 'Any') {
+    res = res.filter(r => r.globalStatus === uiSettings.value.statusFilter)
+  }
+  
+  if (uiSettings.value.securityByRow || uiSettings.value.securityByCol) {
+    res = res.filter(row => {
+      return Object.entries(row.vaultValues).some(([uri, status]) => {
+        const valStr = status.value as string | null;
+        if (!valStr || securitySettings.value.ignoreValues.includes(valStr.toLowerCase())) {
+          return false;
+        }
+        
+        if (uiSettings.value.securityByRow && rowUsageCount.value.get(row.secretName + valStr)! > 1) {
+          return true;
+        }
+        
+        if (uiSettings.value.securityByCol && colUsageCount.value.get(uri + valStr)! > 1) {
+          return true;
+        }
+        
+        return false;
+      });
+    });
+  }
+  
+  return res;
 })
 
 const getVaultName = (uri: string) => {
@@ -261,6 +623,7 @@ const getCellClasses = (status: string) => {
                 @input="searchVaults"
                 @focus="showDropdown = true"
                 @blur="hideDropdown"
+                @keydown.esc="showDropdown = false"
                 placeholder="Search vaults..."
                 class="w-full border border-slate-300 rounded-lg px-4 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -299,7 +662,7 @@ const getCellClasses = (status: string) => {
           </div>
 
           <!-- Active Vaults -->
-          <div class="flex-[2] flex flex-wrap gap-2">
+          <div class="flex-[2] flex flex-wrap items-center gap-2">
             <div 
               v-for="(uri, index) in vaultUris" 
               :key="uri" 
@@ -316,6 +679,20 @@ const getCellClasses = (status: string) => {
                 </svg>
               </button>
             </div>
+            
+            <button 
+              v-if="vaultUris.length > 0"
+              @click="refetchNames"
+              :disabled="loading"
+              class="ml-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+              title="Refresh secret names without fetching values"
+            >
+              <svg v-if="loading" class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+              </svg>
+              Refetch Names
+            </button>
           </div>
 
         </div>
@@ -349,20 +726,58 @@ const getCellClasses = (status: string) => {
               class="w-full md:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <svg v-if="loading" class="animate-spin -ml-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-              {{ loading ? 'Comparing...' : 'Compare' }}
+              {{ loading ? 'Fetching...' : 'Fetch All Values' }}
             </button>
           </div>
           
-          <div v-if="results.length > 0" class="flex items-center gap-2">
-            <span class="text-sm text-slate-500 font-medium">Filter:</span>
+          <div v-if="results.length > 0" class="flex flex-col sm:flex-row items-center gap-4">
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-slate-500 font-medium">Status:</span>
+              <select 
+                v-model="uiSettings.statusFilter" 
+                class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="Any">Any</option>
+                <option value="Match">Exact Matches</option>
+                <option value="Mismatch">Differences</option>
+                <option value="Missing">Missing Secrets</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
+              <span class="text-sm text-slate-500 font-medium mr-1">Reused:</span>
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="checkbox" v-model="uiSettings.securityByRow" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                By Row
+              </label>
+              <div class="w-px h-4 bg-slate-200"></div>
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="checkbox" v-model="uiSettings.securityByCol" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                By Col
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="results.length > 0" class="mt-4 border-t border-slate-100 pt-4 flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50 -mx-6 px-6 -mb-6 pb-6 rounded-b-xl">
+          <div class="flex flex-wrap items-center gap-4">
+            <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
+              <span class="text-sm text-slate-700 font-medium mr-2">Identicons:</span>
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="checkbox" v-model="uiSettings.identiconsByRow" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                By Row
+              </label>
+              <div class="w-px h-4 bg-slate-200"></div>
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="checkbox" v-model="uiSettings.identiconsByCol" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                By Col
+              </label>
+            </div>
             <select 
-              v-model="filter" 
-              class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              v-model="uiSettings.identicolorMode" 
+              class="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700"
             >
-              <option value="All">Show All</option>
-              <option value="Match">Exact Matches</option>
-              <option value="Mismatch">Differences</option>
-              <option value="Missing">Missing Secrets</option>
+              <option value="ByRow">Identicolor: By Row (Matches)</option>
+              <option value="None">Identicolor: None</option>
             </select>
           </div>
         </div>
@@ -377,7 +792,18 @@ const getCellClasses = (status: string) => {
                 <th class="w-12 px-4 py-4 text-center"></th>
                 <th class="px-6 py-4 font-semibold tracking-wider">Secret Name</th>
                 <th v-for="uri in vaultUris" :key="uri" class="px-6 py-4 font-semibold tracking-wider">
-                  {{ getVaultName(uri) }}
+                  <div class="flex items-center gap-2">
+                    <span>{{ getVaultName(uri) }}</span>
+                    <button 
+                      @click="fetchValuesForVault(uri)" 
+                      class="text-slate-400 hover:text-blue-600 transition-colors bg-white rounded-full p-1 shadow-sm border border-slate-200"
+                      title="Fetch values for this vault"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                  </div>
                 </th>
               </tr>
             </thead>
@@ -409,15 +835,40 @@ const getCellClasses = (status: string) => {
                   :class="getCellClasses(row.vaultValues[uri]?.status)"
                 >
                   <div class="flex items-center justify-center gap-4">
-                    <span v-if="row.vaultValues[uri]?.status === 'Missing'" class="text-slate-500 italic text-sm font-medium">
+                    <span v-if="row.vaultValues[uri]?.status === 'Not Retrieved'" class="text-slate-400 italic text-sm font-medium">
+                      ?
+                    </span>
+                    <span v-else-if="row.vaultValues[uri]?.status === 'Loading'" class="text-blue-500 italic text-sm font-medium flex items-center gap-1">
+                      <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    </span>
+                    <span v-else-if="row.vaultValues[uri]?.status === 'Missing'" class="text-rose-500 italic text-sm font-medium">
                       Not Found
                     </span>
-                    <span v-else class="font-mono tracking-widest font-semibold" :class="getValueColor(row.vaultValues[uri]?.colorIndex)">
+                    <span v-else-if="row.vaultValues[uri]?.status === 'Error'" class="text-rose-500 italic text-sm font-medium">
+                      Error
+                    </span>
+                    <span v-else class="font-mono tracking-widest font-semibold flex items-center gap-2 px-1.5 py-0.5 rounded transition-all duration-200" :class="[uiSettings.identicolorMode === 'ByRow' ? getValueColor(row.vaultValues[uri]?.colorIndex) : '', {'bg-yellow-100 ring-2 ring-yellow-400 shadow-sm': highlightedValue === row.vaultValues[uri]?.value}]">
                       <template v-if="visibleSecrets.has(row.secretName)">
-                        <span class="tracking-normal">{{ row.vaultValues[uri]?.value }}</span>
+                        <span class="tracking-normal" :class="{'border-b border-rose-400': row.vaultValues[uri]?.isVulnerable}">{{ row.vaultValues[uri]?.value }}</span>
+                        <span 
+                          v-if="row.vaultValues[uri]?.identiconEmoji" 
+                          class="cursor-pointer hover:scale-125 transition-transform text-lg drop-shadow-sm ml-1"
+                          :title="row.vaultValues[uri]?.isVulnerable ? row.vaultValues[uri]?.vulnerableTooltip : 'Value Identicon'"
+                          @click.stop="toggleHighlight(row.vaultValues[uri]?.value)"
+                        >
+                          {{ row.vaultValues[uri]?.identiconEmoji }}
+                        </span>
                       </template>
                       <template v-else>
-                        ******
+                        <span :class="{'border-b border-rose-400': row.vaultValues[uri]?.isVulnerable}">******</span>
+                        <span 
+                          v-if="row.vaultValues[uri]?.identiconEmoji" 
+                          class="cursor-pointer hover:scale-125 transition-transform text-lg drop-shadow-sm ml-1"
+                          :title="row.vaultValues[uri]?.isVulnerable ? row.vaultValues[uri]?.vulnerableTooltip : 'Value Identicon'"
+                          @click.stop="toggleHighlight(row.vaultValues[uri]?.value)"
+                        >
+                          {{ row.vaultValues[uri]?.identiconEmoji }}
+                        </span>
                       </template>
                     </span>
                   </div>
