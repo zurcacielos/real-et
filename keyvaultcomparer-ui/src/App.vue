@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 
+const currentTab = ref<'dashboard' | 'staged' | 'logs'>('dashboard')
+const showHelpDialog = ref(false)
 const showAuthError = ref(false)
 
 const apiFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -652,22 +654,61 @@ const getCellClasses = (status: string) => {
 </script>
 
 <template>
-  <div class="h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 flex flex-col">
-    <div class="w-full mx-auto space-y-4 flex-1 flex flex-col min-h-0">
-      
-      <!-- Header -->
-      <header class="shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-200 pb-4">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight text-slate-900">Key Vault Comparer</h1>
-          <p class="text-slate-500 text-sm mt-1">Compare secrets across multiple Azure Key Vaults</p>
+  <div class="h-screen bg-slate-50 text-slate-900 font-sans flex flex-col">
+    <!-- Top App Bar -->
+    <header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 shrink-0 shadow-sm z-30 relative">
+      <div class="flex items-center gap-8">
+        <div class="flex items-center gap-2 font-bold text-slate-800 tracking-tight">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+          </svg>
+          <span class="hidden sm:inline-block">KV Comparer</span>
         </div>
+        
+        <nav class="flex items-center gap-1">
+          <button 
+            @click="currentTab = 'dashboard'"
+            class="px-3 py-1.5 text-sm font-semibold rounded-md transition-colors"
+            :class="currentTab === 'dashboard' ? 'bg-slate-100 text-blue-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+          >
+            Dashboard
+          </button>
+          <button 
+            @click="currentTab = 'staged'"
+            class="px-3 py-1.5 text-sm font-semibold rounded-md transition-colors"
+            :class="currentTab === 'staged' ? 'bg-slate-100 text-blue-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+          >
+            Staged Changes
+          </button>
+          <button 
+            @click="currentTab = 'logs'"
+            class="px-3 py-1.5 text-sm font-semibold rounded-md transition-colors"
+            :class="currentTab === 'logs' ? 'bg-slate-100 text-blue-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'"
+          >
+            Logs
+          </button>
+        </nav>
+      </div>
 
-        <div class="flex items-center gap-4 bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200" v-if="profile">
+      <div class="flex items-center gap-3">
+        <button 
+          @click="showHelpDialog = true" 
+          class="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 rounded-md transition-colors"
+          title="Help & About"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+          </svg>
+        </button>
+
+        <div class="h-5 w-px bg-slate-200 mx-1"></div>
+
+        <div class="flex items-center gap-3" v-if="profile">
           <div class="flex items-center gap-2">
-            <span class="text-xs text-slate-500 font-medium uppercase tracking-wider hidden sm:block">Subscription:</span>
+            <span class="text-xs text-slate-500 font-medium uppercase tracking-wider hidden md:block">Sub:</span>
             <select 
               v-model="selectedSubscriptionId"
-              class="border border-slate-300 rounded-md px-2 py-1 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 sm:w-64 truncate bg-slate-50"
+              class="border-none bg-transparent px-1 py-1 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-0 w-32 sm:w-48 truncate cursor-pointer hover:bg-slate-50 rounded"
             >
               <option value="">All Subscriptions</option>
               <option v-for="sub in subscriptions" :key="sub.id" :value="sub.id">
@@ -675,16 +716,22 @@ const getCellClasses = (status: string) => {
               </option>
             </select>
           </div>
-          <div class="h-8 w-px bg-slate-200"></div>
           <div 
-            class="h-10 w-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-inner"
+            class="h-8 w-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-inner text-sm"
             :title="profile.email"
           >
             {{ profile.initials }}
           </div>
         </div>
-      </header>
+      </div>
+    </header>
 
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-hidden flex flex-col bg-slate-50 p-4 md:p-6 relative z-10">
+      
+      <!-- Dashboard Tab -->
+      <div v-show="currentTab === 'dashboard'" class="w-full mx-auto space-y-4 flex-1 flex flex-col min-h-0">
+      
       <!-- Configuration Panel -->
       <div class="shrink-0 bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative z-20">
         <div class="flex flex-col md:flex-row md:items-center gap-6">
@@ -1006,6 +1053,56 @@ const getCellClasses = (status: string) => {
         </div>
       </div>
 
+      </div>
+      
+      <!-- Staged Changes Tab -->
+      <div v-if="currentTab === 'staged'" class="w-full h-full flex flex-col items-center justify-center text-slate-500">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        <h2 class="text-xl font-bold text-slate-700">No Staged Changes</h2>
+        <p class="mt-2 text-sm max-w-md text-center">Modifications made in the Dashboard will appear here for review before applying them to Azure Key Vault.</p>
+      </div>
+
+      <!-- Logs Tab -->
+      <div v-if="currentTab === 'logs'" class="w-full h-full flex flex-col items-center justify-center text-slate-500">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <h2 class="text-xl font-bold text-slate-700">Audit Logs</h2>
+        <p class="mt-2 text-sm max-w-md text-center">Past synchronization events and errors will be listed here.</p>
+      </div>
+
+    </main>
+
+    <!-- Help Dialog -->
+    <div v-if="showHelpDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <div class="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col">
+        <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 class="text-2xl font-bold text-slate-900">Key Vault Comparer</h2>
+            <p class="text-slate-500 text-sm mt-1">Compare and sync secrets across environments.</p>
+          </div>
+          <button @click="showHelpDialog = false" class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </div>
+        <div class="p-6 space-y-4 text-sm text-slate-600">
+          <p>This tool allows you to easily compare secret values across multiple Azure Key Vaults side-by-side.</p>
+          <ul class="list-disc pl-5 space-y-2">
+            <li>Search and select multiple vaults from your Azure Subscriptions.</li>
+            <li>Identify missing, mismatched, or identical secret values instantly.</li>
+            <li>Analyze value entropy, duplication, and potential vulnerabilities.</li>
+            <li>Stage changes and review them before deployment.</li>
+          </ul>
+        </div>
+        <div class="p-4 bg-slate-50 border-t border-slate-100 text-right">
+          <button @click="showHelpDialog = false" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors">Got it</button>
+        </div>
+      </div>
     </div>
+
   </div>
 </template>
