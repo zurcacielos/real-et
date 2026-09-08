@@ -44,6 +44,7 @@ interface UiSettings {
   securityByRow: boolean;
   securityByCol: boolean;
   nameFilter: string;
+  resultLimit: number;
 }
 
 const defaultUiSettings: UiSettings = {
@@ -53,7 +54,8 @@ const defaultUiSettings: UiSettings = {
   statusFilter: 'Any',
   securityByRow: false,
   securityByCol: false,
-  nameFilter: ''
+  nameFilter: '',
+  resultLimit: 50
 };
 
 const identiconEmojis = ['⚽', '🚗', '🚀', '🍎', '🍕', '💎', '🎲', '🎸', '🌈', '🔥', '🪐', '🦄', '🌵', '🍔', '🎨', '🧩', '🎈', '🔋', '🔮', '🧬'];
@@ -83,11 +85,8 @@ const availableVaults = ref<DiscoveredVault[]>([])
 const loadingVaults = ref(false)
 const results = computed<SecretComparisonRow[]>(() => {
   const filtered = filteredNames.value;
-  if (resultLimit.value > 0) {
-    // We limit after filtering
-  }
   
-  return filtered.slice(0, resultLimit.value > 0 ? resultLimit.value : undefined).map(name => {
+  return filtered.slice(0, uiSettings.value.resultLimit > 0 ? uiSettings.value.resultLimit : undefined).map(name => {
     const row: SecretComparisonRow = {
       secretName: name,
       vaultValues: {},
@@ -181,7 +180,6 @@ watch(uiSettings, (newVal) => {
 
 const loading = ref(false)
 const visibleSecrets = ref(new Set<string>())
-const resultLimit = ref(10)
 
 const highlightedValue = ref<string | null>(null)
 const toggleHighlight = (val: string | null | undefined) => {
@@ -488,7 +486,7 @@ const fetchValuesForVault = async (uri: string) => {
   }
   
   // Set status to loading for visible names
-  const namesToFetch = filteredNames.value.slice(0, resultLimit.value > 0 ? resultLimit.value : undefined);
+  const namesToFetch = filteredNames.value.slice(0, uiSettings.value.resultLimit > 0 ? uiSettings.value.resultLimit : undefined);
   namesToFetch.forEach(name => {
     vaultData.value[uri][name] = { value: null, status: 'Loading' };
   });
@@ -716,7 +714,7 @@ const getCellClasses = (status: string) => {
             <div class="flex items-center gap-2">
               <span class="text-sm text-slate-500 font-medium">Limit:</span>
               <select 
-                v-model="resultLimit"
+                v-model="uiSettings.resultLimit"
                 class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option :value="10">10</option>
