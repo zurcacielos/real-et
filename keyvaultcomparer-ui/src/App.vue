@@ -664,6 +664,45 @@ const revertChange = (uri: string, secretName: string) => {
   if (index >= 0) stagedChanges.value.splice(index, 1);
 };
 
+const downloadScript = () => {
+  if (stagedChanges.value.length === 0) return;
+
+  let script = `# Key Vault Comparer - Apply Staged Changes\n`;
+  script += `# This script applies your staged changes with Optimistic Locking verification.\n\n`;
+
+  stagedChanges.value.forEach(change => {
+    const vaultName = getVaultName(change.vaultUri);
+    script += `# --- Secret: ${change.secretName} in ${vaultName} ---\n`;
+    
+    if (change.type === 'UPDATE' && change.originalValue) {
+      script += `$current = az keyvault secret show --vault-name "${vaultName}" --name "${change.secretName}" --query "value" -o tsv 2>$null\n`;
+      script += `if ($current -cne '${change.originalValue.replace(/'/g, "''")}') {\n`;
+      script += `    Write-Warning "Optimistic locking failed for ${change.secretName} in ${vaultName}. Current value does not match expected original value. Skipping."\n`;
+      script += `} else {\n`;
+      script += `    az keyvault secret set --vault-name "${vaultName}" --name "${change.secretName}" --value '${change.newValue.replace(/'/g, "''")}' | Out-Null\n`;
+      script += `    Write-Host "Updated ${change.secretName} in ${vaultName} successfully." -ForegroundColor Green\n`;
+      script += `}\n`;
+    } else if (change.type === 'CREATE') {
+      script += `$exists = az keyvault secret show --vault-name "${vaultName}" --name "${change.secretName}" --query "id" -o tsv 2>$null\n`;
+      script += `if ($exists) {\n`;
+      script += `    Write-Warning "Secret ${change.secretName} already exists in ${vaultName}. Skipping create."\n`;
+      script += `} else {\n`;
+      script += `    az keyvault secret set --vault-name "${vaultName}" --name "${change.secretName}" --value '${change.newValue.replace(/'/g, "''")}' | Out-Null\n`;
+      script += `    Write-Host "Created ${change.secretName} in ${vaultName} successfully." -ForegroundColor Green\n`;
+      script += `}\n`;
+    }
+    script += `\n`;
+  });
+
+  const blob = new Blob([script], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'apply_secrets.ps1';
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 const filteredResults = computed(() => {
   let res = results.value;
 
@@ -1173,12 +1212,24 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
               <h2 class="text-xl font-bold text-slate-900">Review Staged Changes</h2>
               <p class="text-slate-500 text-sm mt-1">You have {{ stagedChanges.length }} pending modification(s).</p>
             </div>
-            <button class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              Apply {{ stagedChanges.length }} Changes to Azure
-            </button>
+            <div class="flex items-center gap-3">
+              <button 
+                @click="downloadScript"
+                class="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center gap-2"
+                title="Download PowerShell script for all changes"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Script
+              </button>
+              <button class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                Apply Up To 5 Changes at Once
+              </button>
+            </div>
           </div>
           <div class="flex-1 overflow-auto">
             <table class="w-full text-left border-collapse">
