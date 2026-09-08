@@ -26,6 +26,9 @@ interface SecretValueStatus {
   value: string | null;
   status: string;
   identiconEmoji?: string;
+  colorIndex?: number;
+  isVulnerable?: boolean;
+  vulnerableTooltip?: string;
 }
 
 interface SecretComparisonRow {
@@ -125,18 +128,19 @@ const results = computed<SecretComparisonRow[]>(() => {
       
       // Calculate identicons based on dimension logic
       const valStr = row.vaultValues[uri].value as string | null;
-      if (valStr && !securitySettings.value.ignoreValues.includes(valStr.toLowerCase())) {
+      const valLower = valStr?.toLowerCase();
+      if (valLower && !securitySettings.value.ignoreValues.includes(valLower)) {
         let hashKey = '';
         let isDuplicated = false;
 
         if (uiSettings.value.identiconsByRow && uiSettings.value.identiconsByCol) {
-          hashKey = valStr;
-          isDuplicated = globalUsageCount.value.get(valStr)! > 1;
+          hashKey = valLower;
+          isDuplicated = globalUsageCount.value.get(valLower)! > 1;
         } else if (uiSettings.value.identiconsByRow) {
-          hashKey = name + valStr;
+          hashKey = name + valLower;
           isDuplicated = rowUsageCount.value.get(hashKey)! > 1;
         } else if (uiSettings.value.identiconsByCol) {
-          hashKey = uri + valStr;
+          hashKey = uri + valLower;
           isDuplicated = colUsageCount.value.get(hashKey)! > 1;
         }
 
@@ -147,9 +151,9 @@ const results = computed<SecretComparisonRow[]>(() => {
       }
 
       // Check vulnerability
-      if (valStr && vulnerableValuesMap.value.has(valStr)) {
+      if (valLower && vulnerableValuesMap.value.has(valLower)) {
         row.vaultValues[uri].isVulnerable = true;
-        const usages = vulnerableValuesMap.value.get(valStr);
+        const usages = vulnerableValuesMap.value.get(valLower);
         row.vaultValues[uri].vulnerableTooltip = `Reused in ${usages?.length} secrets: ${usages?.join(', ')}. Click to highlight occurrences.`;
       }
     });
@@ -157,14 +161,14 @@ const results = computed<SecretComparisonRow[]>(() => {
     // Compute color index based on distinct values
     const distinctValues = Object.values(row.vaultValues)
       .filter(v => v.status !== 'Missing' && v.status !== 'Not Retrieved' && v.status !== 'Error' && v.status !== 'Loading' && v.value !== null)
-      .map(v => v.value)
+      .map(v => v.value!.toLowerCase())
       .filter((v, i, a) => a.indexOf(v) === i);
 
     Object.values(row.vaultValues).forEach(status => {
       if (status.status !== 'Present' || status.value === null) {
         status.colorIndex = 0;
       } else {
-        status.colorIndex = distinctValues.indexOf(status.value) + 1;
+        status.colorIndex = distinctValues.indexOf(status.value.toLowerCase()) + 1;
       }
     });
 
@@ -175,8 +179,8 @@ const results = computed<SecretComparisonRow[]>(() => {
     } else if (statuses.some(s => s.status !== 'Present' && s.status !== 'Match' && s.status !== 'Mismatch')) {
       row.globalStatus = 'Incomplete';
     } else {
-      const firstValue = statuses.find(s => s.status === 'Present')?.value;
-      if (firstValue !== undefined && statuses.every(s => s.value === firstValue)) {
+      const firstValue = statuses.find(s => s.status === 'Present')?.value?.toLowerCase();
+      if (firstValue !== undefined && statuses.every(s => s.value?.toLowerCase() === firstValue)) {
         row.globalStatus = 'Match';
       } else {
         row.globalStatus = 'Mismatch';
@@ -211,8 +215,15 @@ const toggleHighlight = (val: string | null | undefined) => {
 const loadKnownSecretNames = (): Record<string, string[]> => {
   try {
     const saved = localStorage.getItem('savedKnownSecretNames');
-    return saved ? JSON.parse(saved) : {};
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      for (const uri in parsed) {
+        parsed[uri] = parsed[uri].map((n: string) => n.toUpperCase());
+      }
+      return parsed;
+    }
   } catch (e) { return {}; }
+  return {};
 };
 const knownSecretNames = ref<Record<string, string[]>>(loadKnownSecretNames())
 watch(knownSecretNames, (newVal) => {
@@ -239,8 +250,9 @@ const vulnerableValuesMap = computed(() => {
   for (const uri of Object.keys(vaultData.value)) {
     for (const [name, status] of Object.entries(vaultData.value[uri])) {
       if (status.status === 'Present' && status.value) {
-        if (!valueMap.has(status.value)) valueMap.set(status.value, new Set());
-        valueMap.get(status.value)!.add(name);
+        const valLower = status.value.toLowerCase();
+        if (!valueMap.has(valLower)) valueMap.set(valLower, new Set());
+        valueMap.get(valLower)!.add(name);
       }
     }
   }
@@ -250,8 +262,7 @@ const vulnerableValuesMap = computed(() => {
   
   for (const [val, names] of valueMap.entries()) {
     if (names.size > 1) { // It's reused
-      const lowerVal = val.toLowerCase();
-      if (settings.ignoreValues.includes(lowerVal)) continue;
+      if (settings.ignoreValues.includes(val)) continue;
 
       const hasCriticalName = Array.from(names).some(name => {
         const lowerName = name.toLowerCase();
@@ -271,7 +282,8 @@ const globalUsageCount = computed(() => {
   for (const uri of Object.keys(vaultData.value)) {
     for (const status of Object.values(vaultData.value[uri])) {
       if (status.status === 'Present' && status.value) {
-        counts.set(status.value, (counts.get(status.value) || 0) + 1);
+        const val = status.value.toLowerCase();
+        counts.set(val, (counts.get(val) || 0) + 1);
       }
     }
   }
@@ -283,7 +295,7 @@ const rowUsageCount = computed(() => {
   for (const uri of Object.keys(vaultData.value)) {
     for (const [name, status] of Object.entries(vaultData.value[uri])) {
       if (status.status === 'Present' && status.value) {
-        const key = name + status.value;
+        const key = name + status.value.toLowerCase();
         counts.set(key, (counts.get(key) || 0) + 1);
       }
     }
@@ -296,7 +308,7 @@ const colUsageCount = computed(() => {
   for (const uri of Object.keys(vaultData.value)) {
     for (const status of Object.values(vaultData.value[uri])) {
       if (status.status === 'Present' && status.value) {
-        const key = uri + status.value;
+        const key = uri + status.value.toLowerCase();
         counts.set(key, (counts.get(key) || 0) + 1);
       }
     }
@@ -489,13 +501,7 @@ onMounted(() => {
   fetchSubscriptions()
 })
 
-const addVault = () => {
-  if (selectedVaultUri.value && !vaultUris.value.includes(selectedVaultUri.value)) {
-    vaultUris.value.push(selectedVaultUri.value)
-    selectedVaultUri.value = ''
-    searchQuery.value = ''
-  }
-}
+
 
 const removeVault = (index: number) => {
   vaultUris.value.splice(index, 1)
@@ -583,14 +589,7 @@ const getValueColor = (colorIndex: number | undefined) => {
   }
 }
 
-const getBadgeClasses = (status: string) => {
-  switch (status?.toLowerCase()) {
-    case 'match': return 'bg-emerald-100 text-emerald-800 border-emerald-200'
-    case 'mismatch': return 'bg-amber-100 text-amber-800 border-amber-200'
-    case 'missing': return 'bg-rose-100 text-rose-800 border-rose-200'
-    default: return 'bg-slate-100 text-slate-800 border-slate-200'
-  }
-}
+
 
 const getCellClasses = (status: string) => {
   switch (status?.toLowerCase()) {
