@@ -758,7 +758,7 @@ const getCellClasses = (status: string) => {
             <button 
               v-if="vaultUris.length > 0"
               @click="forgetAllNames"
-              class="ml-2 px-3 py-1.5 text-sm font-medium text-rose-600 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-200 transition-colors flex items-center gap-1.5 shadow-sm"
+              class="ml-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 transition-colors flex items-center gap-1.5 shadow-sm"
               title="Forget all discovered secret names"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
