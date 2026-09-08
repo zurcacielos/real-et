@@ -31,6 +31,7 @@ interface SecretValueStatus {
   colorIndex?: number;
   isVulnerable?: boolean;
   vulnerableTooltip?: string;
+  isStaged?: boolean;
 }
 
 interface SecretComparisonRow {
@@ -62,6 +63,16 @@ const defaultSecuritySettings: SecuritySettings = {
   includeKeyKeywords: ['salt', 'key', 'token', 'password', 'secret', 'pwd']
 };
 
+interface StagedChange {
+  vaultUri: string;
+  secretName: string;
+  originalValue: string | null;
+  newValue: string;
+  type: 'CREATE' | 'UPDATE' | 'DELETE';
+}
+const stagedChanges = ref<StagedChange[]>([]);
+const internalClipboard = ref<string | null>(null);
+
 interface UiSettings {
   identiconsByRow: boolean;
   identiconsByCol: boolean;
@@ -71,6 +82,7 @@ interface UiSettings {
   securityByCol: boolean;
   nameFilter: string;
   resultLimit: number;
+  showStagedOnly: boolean;
 }
 
 const defaultUiSettings: UiSettings = {
@@ -81,7 +93,8 @@ const defaultUiSettings: UiSettings = {
   securityByRow: false,
   securityByCol: false,
   nameFilter: '',
-  resultLimit: 50
+  resultLimit: 50,
+  showStagedOnly: false
 };
 
 const identiconEmojis = ['⚽', '🚗', '🚀', '🍎', '🍕', '💎', '🎲', '🎸', '🌈', '🔥', '🪐', '🦄', '🌵', '🍔', '🎨', '🧩', '🎈', '🔋', '🔮', '🧬'];
@@ -149,12 +162,23 @@ const results = computed<SecretComparisonRow[]>(() => {
     
     vaultUris.value.forEach(uri => {
       const knownNamesForVault = knownSecretNames.value[uri] || [];
+      let baseStatus: SecretValueStatus;
+      
       if (!knownNamesForVault.includes(name)) {
-        row.vaultValues[uri] = { status: 'Missing', value: null, colorIndex: 0, isVulnerable: false };
+        baseStatus = { status: 'Missing', value: null, colorIndex: 0, isVulnerable: false };
       } else {
         const d = vaultData.value[uri]?.[name];
-        row.vaultValues[uri] = d ? { ...d, colorIndex: 0, isVulnerable: false } : { status: 'Not Retrieved', value: null, colorIndex: 0, isVulnerable: false };
+        baseStatus = d ? { ...d, colorIndex: 0, isVulnerable: false } : { status: 'Not Retrieved', value: null, colorIndex: 0, isVulnerable: false };
       }
+
+      const staged = stagedChanges.value.find(s => s.vaultUri === uri && s.secretName === name);
+      if (staged) {
+        baseStatus.value = staged.newValue;
+        baseStatus.status = 'Present';
+        baseStatus.isStaged = true;
+      }
+      
+      row.vaultValues[uri] = baseStatus;
       
       // Calculate identicons based on dimension logic
       const valStr = row.vaultValues[uri].value as string | null;
@@ -593,8 +617,62 @@ const fetchButtonTitle = computed(() => {
     : 'Fetch all values from all names.';
 });
 
+const handleCopy = async (value: string | null | undefined) => {
+  if (!value) return;
+  internalClipboard.value = value;
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch (e) {
+    console.warn('Clipboard write failed, using internal clipboard only');
+  }
+};
+
+const handlePaste = async (uri: string, secretName: string, currentStatus: SecretValueStatus | undefined) => {
+  if (!currentStatus) return;
+  let pasteValue = internalClipboard.value;
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) pasteValue = text;
+  } catch (e) {
+    // Fallback to internal clipboard
+  }
+
+  if (!pasteValue || pasteValue === currentStatus.value) return;
+
+  const originalValue = currentStatus.isStaged 
+    ? stagedChanges.value.find(s => s.vaultUri === uri && s.secretName === secretName)?.originalValue || null
+    : currentStatus.value;
+
+  const type = (originalValue === null || currentStatus.status === 'Missing' || currentStatus.status === 'Not Retrieved') ? 'CREATE' : 'UPDATE';
+
+  const existingIndex = stagedChanges.value.findIndex(s => s.vaultUri === uri && s.secretName === secretName);
+  
+  if (pasteValue === originalValue) {
+    if (existingIndex >= 0) stagedChanges.value.splice(existingIndex, 1);
+    return;
+  }
+
+  if (existingIndex >= 0) {
+    stagedChanges.value[existingIndex].newValue = pasteValue;
+  } else {
+    stagedChanges.value.push({ vaultUri: uri, secretName, originalValue, newValue: pasteValue, type });
+  }
+};
+
+const revertChange = (uri: string, secretName: string) => {
+  const index = stagedChanges.value.findIndex(s => s.vaultUri === uri && s.secretName === secretName);
+  if (index >= 0) stagedChanges.value.splice(index, 1);
+};
+
 const filteredResults = computed(() => {
   let res = results.value;
+
+  if (uiSettings.value.showStagedOnly) {
+    res = res.filter(row => 
+      stagedChanges.value.some(s => s.secretName === row.secretName && vaultUris.value.includes(s.vaultUri))
+    );
+  }
+
   if (uiSettings.value.statusFilter !== 'Any') {
     res = res.filter(r => r.globalStatus === uiSettings.value.statusFilter)
   }
@@ -643,8 +721,12 @@ const getValueColor = (colorIndex: number | undefined) => {
 
 
 
-const getCellClasses = (status: string) => {
-  switch (status?.toLowerCase()) {
+const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
+  if (!statusObj) return '';
+  if (statusObj.isStaged) {
+    return 'bg-amber-50 border-l-[3px] border-l-amber-400 !border-r !border-r-amber-100 shadow-[inset_0_0_8px_rgba(251,191,36,0.15)]';
+  }
+  switch (statusObj.status?.toLowerCase()) {
     case 'match': return 'bg-emerald-50/50'
     case 'mismatch': return 'bg-amber-50/50'
     case 'missing': return 'bg-rose-50/50'
@@ -889,6 +971,12 @@ const getCellClasses = (status: string) => {
                 By Col
               </label>
             </div>
+            <div class="flex items-center gap-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg px-3 py-1.5 h-[34px] ml-auto">
+              <label class="flex items-center gap-1.5 text-sm font-medium cursor-pointer hover:text-amber-900 transition-colors">
+                <input type="checkbox" v-model="uiSettings.showStagedOnly" class="rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                Show Staged Only
+              </label>
+            </div>
           </div>
         </div>
 
@@ -965,9 +1053,24 @@ const getCellClasses = (status: string) => {
                 <td 
                   v-for="uri in vaultUris" 
                   :key="uri"
-                  class="px-6 py-4 border-r border-slate-100 last:border-r-0"
-                  :class="getCellClasses(row.vaultValues[uri]?.status)"
+                  class="px-6 py-4 border-r border-slate-100 last:border-r-0 relative focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-400 group/cell transition-colors cursor-cell"
+                  tabindex="0"
+                  @keydown.ctrl.c.prevent="handleCopy(row.vaultValues[uri]?.value)"
+                  @keydown.meta.c.prevent="handleCopy(row.vaultValues[uri]?.value)"
+                  @keydown.ctrl.v.prevent="handlePaste(uri, row.secretName, row.vaultValues[uri])"
+                  @keydown.meta.v.prevent="handlePaste(uri, row.secretName, row.vaultValues[uri])"
+                  :class="getCellClasses(row.vaultValues[uri])"
                 >
+                  <button 
+                    v-if="row.vaultValues[uri]?.isStaged"
+                    @click.stop="revertChange(uri, row.secretName)"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/cell:opacity-100 bg-white shadow border border-slate-200 rounded p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 hover:border-amber-300 transition-all z-20"
+                    title="Revert Change"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                  </button>
                   <div class="flex items-center justify-center gap-4">
                     <span v-if="row.vaultValues[uri]?.status === 'Not Retrieved'" class="text-slate-400 italic text-sm font-medium">
                       ?
@@ -1056,12 +1159,73 @@ const getCellClasses = (status: string) => {
       </div>
       
       <!-- Staged Changes Tab -->
-      <div v-if="currentTab === 'staged'" class="w-full h-full flex flex-col items-center justify-center text-slate-500">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
-        <h2 class="text-xl font-bold text-slate-700">No Staged Changes</h2>
-        <p class="mt-2 text-sm max-w-md text-center">Modifications made in the Dashboard will appear here for review before applying them to Azure Key Vault.</p>
+      <div v-if="currentTab === 'staged'" class="w-full mx-auto flex-1 flex flex-col min-h-0">
+        <div v-if="stagedChanges.length === 0" class="flex-1 flex flex-col items-center justify-center text-slate-500">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <h2 class="text-xl font-bold text-slate-700">No Staged Changes</h2>
+          <p class="mt-2 text-sm max-w-md text-center">Modifications made in the Dashboard will appear here for review before applying them to Azure Key Vault.</p>
+        </div>
+        <div v-else class="flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div class="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50/50 shrink-0">
+            <div>
+              <h2 class="text-xl font-bold text-slate-900">Review Staged Changes</h2>
+              <p class="text-slate-500 text-sm mt-1">You have {{ stagedChanges.length }} pending modification(s).</p>
+            </div>
+            <button class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Apply {{ stagedChanges.length }} Changes to Azure
+            </button>
+          </div>
+          <div class="flex-1 overflow-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider sticky top-0 shadow-sm z-10">
+                  <th class="px-6 py-3 font-semibold bg-slate-50">Vault</th>
+                  <th class="px-6 py-3 font-semibold bg-slate-50">Secret Name</th>
+                  <th class="px-6 py-3 font-semibold bg-slate-50">Action</th>
+                  <th class="px-6 py-3 font-semibold bg-slate-50">Original Value</th>
+                  <th class="px-6 py-3 font-semibold bg-slate-50">New Value</th>
+                  <th class="px-6 py-3 font-semibold bg-slate-50 text-right"></th>
+                </tr>
+              </thead>
+              <tbody class="text-sm divide-y divide-slate-100">
+                <tr v-for="(change, idx) in stagedChanges" :key="idx" class="hover:bg-slate-50 transition-colors">
+                  <td class="px-6 py-4 font-medium text-slate-700">{{ getVaultName(change.vaultUri) }}</td>
+                  <td class="px-6 py-4 font-medium text-slate-900">{{ change.secretName }}</td>
+                  <td class="px-6 py-4">
+                    <span 
+                      class="px-2 py-1 rounded-md text-xs font-bold"
+                      :class="change.type === 'CREATE' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'"
+                    >
+                      {{ change.type }}
+                    </span>
+                  </td>
+                  <td class="px-6 py-4 text-slate-500 font-mono text-xs max-w-xs truncate" :title="change.originalValue || ''">
+                    {{ change.originalValue || '(Missing)' }}
+                  </td>
+                  <td class="px-6 py-4 font-mono text-xs max-w-xs truncate text-amber-600" :title="change.newValue">
+                    {{ change.newValue }}
+                  </td>
+                  <td class="px-6 py-4 text-right">
+                    <button 
+                      @click="revertChange(change.vaultUri, change.secretName)"
+                      class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                      title="Revert"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- Logs Tab -->
