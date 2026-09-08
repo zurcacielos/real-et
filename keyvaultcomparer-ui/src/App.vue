@@ -95,7 +95,34 @@ const hashString = (str: string) => {
 
 const profile = ref<UserProfile | null>(null)
 
+const loadSharableConfig = () => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const s = params.get('s');
+    if (s) {
+      return JSON.parse(atob(s));
+    }
+  } catch (e) {
+    console.warn('Failed to parse URL config', e);
+  }
+  return null;
+};
+const urlConfig = loadSharableConfig();
+
+const syncUrl = () => {
+  try {
+    const payload = { u: uiSettings.value, v: vaultUris.value };
+    const encoded = btoa(JSON.stringify(payload));
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('s', encoded);
+    window.history.replaceState({}, '', newUrl);
+  } catch (e) { console.warn('Failed to sync URL', e); }
+};
+
 const loadSavedVaultUris = (): string[] => {
+  if (urlConfig && urlConfig.v && Array.isArray(urlConfig.v)) {
+    return urlConfig.v;
+  }
   try {
     const saved = localStorage.getItem('savedVaultUris');
     return saved ? JSON.parse(saved) : [];
@@ -104,6 +131,7 @@ const loadSavedVaultUris = (): string[] => {
 const vaultUris = ref<string[]>(loadSavedVaultUris())
 watch(vaultUris, (newVal) => {
   localStorage.setItem('savedVaultUris', JSON.stringify(newVal));
+  syncUrl();
 }, { deep: true });
 const availableVaults = ref<DiscoveredVault[]>([])
 const loadingVaults = ref(false)
@@ -192,15 +220,21 @@ const results = computed<SecretComparisonRow[]>(() => {
 })
 
 const loadUiSettings = (): UiSettings => {
+  let base = { ...defaultUiSettings };
   try {
     const stored = localStorage.getItem('uiSettings');
-    if (stored) return { ...defaultUiSettings, ...JSON.parse(stored) };
+    if (stored) base = { ...base, ...JSON.parse(stored) };
   } catch (e) { console.error('Failed to parse UI settings', e); }
-  return defaultUiSettings;
+  
+  if (urlConfig && urlConfig.u) {
+    base = { ...base, ...urlConfig.u };
+  }
+  return base;
 };
 const uiSettings = ref<UiSettings>(loadUiSettings());
 watch(uiSettings, (newVal) => {
   localStorage.setItem('uiSettings', JSON.stringify(newVal));
+  syncUrl();
 }, { deep: true });
 
 const loading = ref(false)
@@ -507,6 +541,10 @@ const removeVault = (index: number) => {
   vaultUris.value.splice(index, 1)
 }
 
+const forgetAllNames = () => {
+  knownSecretNames.value = {};
+}
+
 const fetchValuesForVault = async (uri: string) => {
   if (!vaultData.value[uri]) {
     vaultData.value[uri] = {};
@@ -716,6 +754,17 @@ const getCellClasses = (status: string) => {
                 <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
               </svg>
               Refetch Names
+            </button>
+            <button 
+              v-if="vaultUris.length > 0"
+              @click="forgetAllNames"
+              class="ml-2 px-3 py-1.5 text-sm font-medium text-rose-600 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-200 transition-colors flex items-center gap-1.5 shadow-sm"
+              title="Forget all discovered secret names"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+              </svg>
+              Forget Names
             </button>
           </div>
 
