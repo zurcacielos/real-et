@@ -1,6 +1,27 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 
+const showAuthError = ref(false)
+
+const apiFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const response = await fetch(input, init)
+  if (response.status === 401) {
+    showAuthError.value = true
+    throw new Error('Azure Login Required')
+  }
+  return response
+}
+
+const retryAuth = () => {
+  showAuthError.value = false
+  fetchProfile()
+  fetchSubscriptions()
+  if (vaultUris.value.length > 0) {
+    fetchVaultKeys()
+    fetchComparison()
+  }
+}
+
 interface SecretValueStatus {
   value: string | null;
   status: string;
@@ -310,7 +331,7 @@ const refetchNames = async () => {
   if (vaultUris.value.length === 0) return;
   loading.value = true;
   try {
-    const response = await fetch('/api/vaults/keys', {
+    const response = await apiFetch('/api/vaults/keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(vaultUris.value)
@@ -335,7 +356,7 @@ const fetchVaultKeys = async () => {
     return;
   }
   try {
-    const response = await fetch('/api/vaults/keys', {
+    const response = await apiFetch('/api/vaults/keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(vaultUris.value)
@@ -394,7 +415,7 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 const fetchProfile = async () => {
   try {
-    const response = await fetch('/api/profile')
+    const response = await apiFetch('/api/profile')
     if (response.ok) {
       profile.value = await response.json()
     }
@@ -405,7 +426,7 @@ const fetchProfile = async () => {
 
 const fetchSubscriptions = async () => {
   try {
-    const response = await fetch('/api/subscriptions')
+    const response = await apiFetch('/api/subscriptions')
     if (response.ok) {
       subscriptions.value = await response.json()
     }
@@ -434,7 +455,7 @@ const searchVaults = () => {
       if (selectedSubscriptionId.value) {
         url += `&subscriptionId=${encodeURIComponent(selectedSubscriptionId.value)}`
       }
-      const response = await fetch(url)
+      const response = await apiFetch(url)
       if (response.ok) {
         availableVaults.value = await response.json()
       }
@@ -492,7 +513,7 @@ const fetchValuesForVault = async (uri: string) => {
   });
 
   try {
-    const response = await fetch('/api/vault/values', {
+    const response = await apiFetch('/api/vault/values', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -890,6 +911,37 @@ const getCellClasses = (status: string) => {
         </svg>
         <h3 class="text-lg font-medium text-slate-900">No comparisons yet</h3>
         <p class="mt-1 text-slate-500">Select multiple Key Vaults from the configuration panel and click Compare to view differences.</p>
+      </div>
+
+      <!-- Azure Auth Error Modal -->
+      <div v-if="showAuthError" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden transform transition-all">
+          <div class="p-6">
+            <div class="flex items-center gap-4 mb-4 text-rose-600">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <h3 class="text-xl font-bold text-slate-900">Autenticación Requerida</h3>
+            </div>
+            <p class="text-slate-600 mb-6">
+              Tu sesión de Azure CLI ha expirado o no fue encontrada. Para continuar, abre una terminal en tu computadora y ejecuta:
+            </p>
+            <div class="bg-slate-100 rounded-lg p-3 flex items-center justify-between mb-6 border border-slate-200">
+              <code class="text-slate-800 font-mono text-sm font-semibold">az login</code>
+            </div>
+            <p class="text-slate-500 text-sm mb-6">
+              Una vez que inicies sesión en el navegador que se abrirá, regresa a esta ventana y presiona Reintentar.
+            </p>
+            <div class="flex justify-end">
+              <button 
+                @click="retryAuth" 
+                class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors shadow-sm"
+              >
+                Reintentar
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>

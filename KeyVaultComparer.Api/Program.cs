@@ -42,6 +42,20 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors();
 
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next(context);
+    }
+    catch (Azure.Identity.CredentialUnavailableException ex)
+    {
+        context.Response.StatusCode = 401;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new { error = "az_login_required", message = ex.Message });
+    }
+});
+
 app.MapPost("/api/vaults/keys", async ([FromBody] List<string> vaultUris, KeyVaultService service) =>
 {
     var result = await service.GetAllSecretNamesAsync(vaultUris);
