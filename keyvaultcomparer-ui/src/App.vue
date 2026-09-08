@@ -43,6 +43,7 @@ interface UiSettings {
   statusFilter: string;
   securityByRow: boolean;
   securityByCol: boolean;
+  nameFilter: string;
 }
 
 const defaultUiSettings: UiSettings = {
@@ -51,7 +52,8 @@ const defaultUiSettings: UiSettings = {
   identicolorMode: 'ByRow',
   statusFilter: 'Any',
   securityByRow: false,
-  securityByCol: false
+  securityByCol: false,
+  nameFilter: ''
 };
 
 const identiconEmojis = ['⚽', '🚗', '🚀', '🍎', '🍕', '💎', '🎲', '🎸', '🌈', '🔥', '🪐', '🦄', '🌵', '🍔', '🎨', '🧩', '🎈', '🔋', '🔮', '🧬'];
@@ -179,7 +181,6 @@ watch(uiSettings, (newVal) => {
 
 const loading = ref(false)
 const visibleSecrets = ref(new Set<string>())
-const nameFilter = ref('')
 const resultLimit = ref(10)
 
 const highlightedValue = ref<string | null>(null)
@@ -320,7 +321,7 @@ const refetchNames = async () => {
     const data = await response.json();
     
     for (const [uri, names] of Object.entries(data)) {
-      knownSecretNames.value[uri] = names as string[];
+      knownSecretNames.value[uri] = (names as string[]).map(n => n.toUpperCase());
     }
   } catch (error) {
     console.error('Error fetching names:', error);
@@ -342,7 +343,12 @@ const fetchVaultKeys = async () => {
       body: JSON.stringify(vaultUris.value)
     });
     if (response.ok) {
-      knownSecretNames.value = await response.json();
+      const data = await response.json();
+      const upperData: Record<string, string[]> = {};
+      for (const [uri, names] of Object.entries(data)) {
+        upperData[uri] = (names as string[]).map(n => n.toUpperCase());
+      }
+      knownSecretNames.value = upperData;
     }
   } catch (error) {
     console.error('Failed to fetch keys', error);
@@ -358,8 +364,8 @@ const filteredNames = computed(() => {
   Object.values(knownSecretNames.value).flat().forEach(n => set.add(n));
   let names = Array.from(set).sort();
 
-  if (nameFilter.value.trim()) {
-    const filters = nameFilter.value.split(',').map(f => f.trim()).filter(f => f);
+  if (uiSettings.value.nameFilter.trim()) {
+    const filters = uiSettings.value.nameFilter.split(',').map(f => f.trim()).filter(f => f);
     names = names.filter(name => {
       for (const f of filters) {
         try {
@@ -578,11 +584,11 @@ const getCellClasses = (status: string) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 text-slate-900 font-sans p-6 md:p-8">
-    <div class="max-w-7xl mx-auto space-y-6">
+  <div class="h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-6 flex flex-col">
+    <div class="w-full mx-auto space-y-4 flex-1 flex flex-col min-h-0">
       
       <!-- Header -->
-      <header class="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-200 pb-4 mb-8">
+      <header class="shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <h1 class="text-3xl font-bold tracking-tight text-slate-900">Key Vault Comparer</h1>
           <p class="text-slate-500 text-sm mt-1">Compare secrets across multiple Azure Key Vaults</p>
@@ -612,7 +618,7 @@ const getCellClasses = (status: string) => {
       </header>
 
       <!-- Configuration Panel -->
-      <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative z-20">
+      <div class="shrink-0 bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative z-20">
         <div class="flex flex-col md:flex-row md:items-center gap-6">
           
           <div class="flex-1 flex gap-3 relative">
@@ -701,7 +707,7 @@ const getCellClasses = (status: string) => {
           <div class="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
             <input 
               type="text"
-              v-model="nameFilter"
+              v-model="uiSettings.nameFilter"
               placeholder="Regex filter (CSV)..."
               class="w-full md:w-64 border border-slate-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               @keyup.enter="fetchComparison"
@@ -784,14 +790,14 @@ const getCellClasses = (status: string) => {
       </div>
 
       <!-- Results Data Grid -->
-      <div v-if="results.length > 0" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative z-10">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm whitespace-nowrap">
-            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600">
+      <div v-if="results.length > 0" class="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 min-h-0 flex flex-col relative z-10">
+        <div class="overflow-auto flex-1">
+          <table class="w-full text-left text-sm whitespace-nowrap border-collapse">
+            <thead class="bg-slate-50 text-slate-600 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
               <tr>
-                <th class="w-12 px-4 py-4 text-center"></th>
-                <th class="px-6 py-4 font-semibold tracking-wider">Secret Name</th>
-                <th v-for="uri in vaultUris" :key="uri" class="px-6 py-4 font-semibold tracking-wider">
+                <th class="w-12 px-4 py-4 text-center sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]"></th>
+                <th class="px-6 py-4 font-semibold tracking-wider sticky left-[48px] z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]">Secret Name</th>
+                <th v-for="uri in vaultUris" :key="uri" class="px-6 py-4 font-semibold tracking-wider bg-slate-50">
                   <div class="flex items-center gap-2">
                     <span>{{ getVaultName(uri) }}</span>
                     <button 
@@ -808,8 +814,8 @@ const getCellClasses = (status: string) => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr v-for="row in filteredResults" :key="row.secretName" class="hover:bg-slate-50/50 transition-colors">
-                <td class="px-4 py-4 text-center border-r border-slate-100">
+              <tr v-for="row in filteredResults" :key="row.secretName" class="hover:bg-slate-50/50 transition-colors group">
+                <td class="px-4 py-4 text-center border-r border-slate-100 sticky left-0 z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9]">
                   <button 
                     @click="toggleVisibility(row.secretName)"
                     class="text-slate-400 hover:text-slate-700 focus:outline-none transition-colors"
@@ -825,7 +831,7 @@ const getCellClasses = (status: string) => {
                     </svg>
                   </button>
                 </td>
-                <td class="px-6 py-4 font-medium text-slate-900 border-r border-slate-100">
+                <td class="px-6 py-4 font-medium text-slate-900 border-r border-slate-100 sticky left-[48px] z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9]">
                   {{ row.secretName }}
                 </td>
                 <td 
