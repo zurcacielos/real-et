@@ -1258,7 +1258,6 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 class="w-full border border-slate-300 rounded-lg pl-8 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 @keyup.enter="appStore.applySecretNameFilter(); showHistoryDropdown = false"
                 @keydown.esc="showHistoryDropdown = false"
-                @focus="showHistoryDropdown = true"
                 @blur="hideHistoryDropdown"
               />
               <div v-if="showHistoryDropdown && appStore.availableRecentFilters.length > 0" class="absolute z-50 w-full mt-1 bg-white border border-slate-200 shadow-lg rounded-md overflow-hidden">
@@ -1393,8 +1392,11 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
           <table class="w-full text-left text-sm whitespace-nowrap border-collapse">
             <thead class="bg-slate-50 text-slate-600 sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]">
               <tr>
-                <th class="w-12 px-4 py-4 text-center sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]"></th>
-                <th class="px-6 py-4 font-semibold tracking-wider sticky left-[48px] z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]">Secret Name</th>
+                <th class="w-10 px-2 py-4 text-center sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0] text-xs text-slate-400">#</th>
+                <th class="w-10 px-2 py-4 text-center sticky left-[40px] z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-auto text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" /></svg>
+                </th>
+                <th class="px-6 py-4 font-semibold tracking-wider sticky left-[80px] z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]">Secret Name</th>
                 <th v-for="uri in vaultUris" :key="uri" class="px-6 py-4 font-semibold tracking-wider bg-slate-50">
                   <div class="flex items-center justify-between">
                     <span class="text-slate-900">{{ getVaultName(uri) }}</span>
@@ -1413,7 +1415,10 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
             </thead>
             <tbody class="divide-y divide-slate-100">
               <tr v-for="(row, index) in filteredResults" :key="row.secretName" class="hover:bg-slate-50/50 transition-colors group">
-                <td class="px-4 py-4 text-center border-r border-slate-100 sticky left-0 z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9]">
+                <td class="w-10 px-2 py-4 text-center text-xs text-slate-400 font-normal whitespace-nowrap border-r border-slate-100 sticky left-0 z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9]">
+                  {{ index + 1 }}
+                </td>
+                <td class="w-10 px-2 py-4 text-center border-r border-slate-100 sticky left-[40px] z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9]">
                   <button 
                     @click="toggleVisibility(row.secretName)"
                     class="text-slate-400 hover:text-slate-700 focus:outline-none transition-colors"
@@ -1429,12 +1434,9 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                     </svg>
                   </button>
                 </td>
-                <td class="px-6 py-4 font-medium text-slate-900 border-r border-slate-100 sticky left-[48px] z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9] group/namecell">
+                <td class="px-6 py-4 font-medium text-slate-900 border-r border-slate-100 sticky left-[80px] z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9] group/namecell">
                   <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3 truncate">
-                      <span class="text-xs text-slate-400 font-normal w-6 shrink-0 text-right">{{ index + 1 }}</span>
-                      <span class="truncate pr-2" :title="row.secretName">{{ row.secretName }}</span>
-                    </div>
+                    <span class="truncate pr-2" :title="row.secretName">{{ row.secretName }}</span>
                     <button 
                       @click="fetchValuesForRow(row.secretName)"
                       class="text-slate-400 hover:text-blue-600 transition-colors bg-white rounded-full p-1.5 shadow-sm border border-slate-200 opacity-0 group-hover/namecell:opacity-100 flex-shrink-0"
