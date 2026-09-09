@@ -634,19 +634,33 @@ watch(vaultUris, () => {
   fetchVaultKeys();
 }, { deep: true })
 
-const filteredNames = computed(() => {
+const allSortedNames = computed(() => {
   const set = new Set<string>();
   Object.values(knownSecretNames.value).flat().forEach(n => set.add(n));
-  let names = Array.from(set).sort();
+  return Array.from(set).sort();
+});
+
+const filteredNames = computed(() => {
+  let names = allSortedNames.value;
 
   if (uiSettings.value.nameFilter.trim()) {
     const filters = uiSettings.value.nameFilter.split(',').map(f => f.trim()).filter(f => f);
+    
+    // Pre-compile regexes outside the loop to prevent UI freezing
+    const compiledFilters = filters.map(f => {
+      try {
+        return { isRegex: true, rx: new RegExp(f, 'i'), str: f };
+      } catch {
+        return { isRegex: false, rx: null, str: f.toLowerCase() };
+      }
+    });
+
     names = names.filter(name => {
-      for (const f of filters) {
-        try {
-          if (new RegExp(f, 'i').test(name)) return true;
-        } catch {
-          if (name.toLowerCase().includes(f.toLowerCase())) return true;
+      for (const f of compiledFilters) {
+        if (f.isRegex) {
+          if (f.rx!.test(name)) return true;
+        } else {
+          if (name.toLowerCase().includes(f.str)) return true;
         }
       }
       return false;
@@ -1243,7 +1257,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
               </div>
               <input 
                 type="text"
-                v-model.lazy="uiSettings.nameFilter"
+                v-model="uiSettings.nameFilter"
                 placeholder="Regex filter (CSV)..."
                 class="w-full border border-slate-300 rounded-lg pl-8 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 @keyup.enter="applyFilter; showHistoryDropdown = false"
