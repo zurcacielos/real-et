@@ -559,6 +559,24 @@ const hideDropdown = () => {
 onMounted(() => {
   fetchProfile()
   fetchSubscriptions()
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      copiedCell.value = null;
+    }
+  });
+
+  document.addEventListener('focusin', (e) => {
+    if (!(e.target as HTMLElement).closest('table')) {
+      copiedCell.value = null;
+    }
+  });
+  
+  document.addEventListener('click', (e) => {
+    if (!(e.target as HTMLElement).closest('td')) {
+      copiedCell.value = null;
+    }
+  });
 })
 
 
@@ -617,9 +635,12 @@ const fetchButtonTitle = computed(() => {
     : 'Fetch all values from all names.';
 });
 
-const handleCopy = async (value: string | null | undefined) => {
+const copiedCell = ref<{uri: string, secretName: string} | null>(null);
+
+const handleCopy = async (uri: string, secretName: string, value: string | null | undefined) => {
   if (!value) return;
   internalClipboard.value = value;
+  copiedCell.value = { uri, secretName };
   try {
     await navigator.clipboard.writeText(value);
   } catch (e) {
@@ -1094,11 +1115,11 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                   :key="uri"
                   class="px-6 py-4 border-r border-slate-100 last:border-r-0 relative focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-400 group/cell transition-colors cursor-cell"
                   tabindex="0"
-                  @keydown.ctrl.c.prevent="handleCopy(row.vaultValues[uri]?.value)"
-                  @keydown.meta.c.prevent="handleCopy(row.vaultValues[uri]?.value)"
+                  @keydown.ctrl.c.prevent="handleCopy(uri, row.secretName, row.vaultValues[uri]?.value)"
+                  @keydown.meta.c.prevent="handleCopy(uri, row.secretName, row.vaultValues[uri]?.value)"
                   @keydown.ctrl.v.prevent="handlePaste(uri, row.secretName, row.vaultValues[uri])"
                   @keydown.meta.v.prevent="handlePaste(uri, row.secretName, row.vaultValues[uri])"
-                  :class="getCellClasses(row.vaultValues[uri])"
+                  :class="[getCellClasses(row.vaultValues[uri]), copiedCell?.uri === uri && copiedCell?.secretName === row.secretName ? '!outline-dashed !outline-2 !outline-blue-500 !outline-offset-[-2px] z-30' : '']"
                 >
                   <button 
                     v-if="row.vaultValues[uri]?.isStaged"
