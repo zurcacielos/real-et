@@ -81,8 +81,6 @@ interface SecretValueStatus {
   status: string;
   identiconEmoji?: string;
   colorIndex?: number;
-  isVulnerable?: boolean;
-  vulnerableTooltip?: string;
   isStaged?: boolean;
   inspections?: InspectionResult[];
   highestSeverity?: 'Low' | 'Medium' | 'High' | 'Critical';
@@ -309,10 +307,10 @@ const results = computed<SecretComparisonRow[]>(() => {
       let baseStatus: SecretValueStatus;
       
       if (!knownNamesForVault.includes(name)) {
-        baseStatus = { status: 'Missing', value: null, colorIndex: 0, isVulnerable: false };
+        baseStatus = { status: 'Missing', value: null, colorIndex: 0 };
       } else {
         const d = vaultData.value[uri]?.[name];
-        baseStatus = d ? { ...d, colorIndex: 0, isVulnerable: false } : { status: 'Not Retrieved', value: null, colorIndex: 0, isVulnerable: false };
+        baseStatus = d ? { ...d, colorIndex: 0 } : { status: 'Not Retrieved', value: null, colorIndex: 0 };
       }
 
       const staged = stagedChanges.value.find(s => s.vaultUri === uri && s.secretName === name);
@@ -358,9 +356,16 @@ const results = computed<SecretComparisonRow[]>(() => {
 
       // Check vulnerability
       if (valLower && vulnerableValuesMap.value.has(valLower)) {
-        row.vaultValues[uri].isVulnerable = true;
         const usages = vulnerableValuesMap.value.get(valLower);
-        row.vaultValues[uri].vulnerableTooltip = `Reused in ${usages?.length} secrets: ${usages?.join(', ')}. Click to highlight occurrences.`;
+        if (!row.vaultValues[uri].inspections) row.vaultValues[uri].inspections = [];
+        row.vaultValues[uri].inspections!.push({
+          ruleName: 'Reused Secret',
+          severity: 'High',
+          message: `Reused in ${usages?.length} secrets: ${usages?.join(', ')}. Click identical values to highlight occurrences.`
+        });
+        if (row.vaultValues[uri].highestSeverity !== 'Critical') {
+          row.vaultValues[uri].highestSeverity = 'High';
+        }
       }
     });
 
@@ -945,6 +950,18 @@ const filteredResults = computed(() => {
   if (uiSettings.value.statusFilter !== 'Any') {
     res = res.filter(r => r.globalStatus === uiSettings.value.statusFilter)
   }
+
+  if (appStore.state.inspectionFilter !== 'Ignore') {
+    res = res.filter(row => {
+      return vaultUris.value.some(uri => {
+        const val = row.vaultValues[uri];
+        if (!val || !val.highestSeverity) return false;
+        
+        if (appStore.state.inspectionFilter === 'Any') return true;
+        return val.highestSeverity === appStore.state.inspectionFilter;
+      });
+    });
+  }
   
   if (uiSettings.value.securityByRow || uiSettings.value.securityByCol) {
     res = res.filter(row => {
@@ -969,6 +986,8 @@ const filteredResults = computed(() => {
   
   return res;
 })
+
+
 
 const getVaultName = (uri: string) => {
   try {
@@ -1302,11 +1321,24 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
         <div v-if="results.length > 0" class="mt-4 border-t border-slate-100 pt-4 flex flex-col xl:flex-row items-center justify-end gap-4 bg-slate-50/50 -mx-6 px-6 -mb-6 pb-6 rounded-b-xl">
           <div class="flex flex-wrap items-center gap-4">
             <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
-              <span class="text-sm text-slate-700 font-medium mr-1">Inspections:</span>
-              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors" title="Live Security Inspections (Entropy & Patterns)">
+              <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
                 <input type="checkbox" v-model="uiSettings.enableInspections" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-                Live Analysis
+                <span class="font-medium">Run Inspections</span>
               </label>
+              <div class="w-px h-4 bg-slate-200"></div>
+              <span class="text-sm text-slate-700 font-medium">Level:</span>
+              <select 
+                :value="appStore.state.inspectionFilter"
+                @change="appStore.setInspectionFilter(($event.target as HTMLSelectElement).value as any)"
+                class="bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700 h-[34px]"
+              >
+                <option value="Ignore">Ignore (All)</option>
+                <option value="Any">Any Level</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
             </div>
             <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
               <span class="text-sm text-slate-700 font-medium mr-2">Identicons:</span>
@@ -1486,14 +1518,13 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                       <template v-if="visibleSecrets.has(row.secretName)">
                         <span class="tracking-normal block max-w-[250px] overflow-x-auto align-bottom secret-scroll pb-0.5" 
                               :class="{
-                                'border-b border-rose-400': row.vaultValues[uri]?.isVulnerable,
                                 'underline decoration-wavy decoration-rose-500 decoration-2 underline-offset-4': row.vaultValues[uri]?.highestSeverity === 'Critical',
                                 'underline decoration-wavy decoration-orange-400 decoration-2 underline-offset-4': row.vaultValues[uri]?.highestSeverity === 'High'
                               }">{{ row.vaultValues[uri]?.value }}</span>
                         <span 
                           v-if="row.vaultValues[uri]?.identiconEmoji"  
                           class="cursor-pointer hover:scale-125 transition-transform text-lg drop-shadow-sm ml-1"
-                          :title="row.vaultValues[uri]?.isVulnerable ? row.vaultValues[uri]?.vulnerableTooltip : 'Value Identicon'"
+                          title="Value Identicon"
                           @click.stop="toggleHighlight(row.vaultValues[uri]?.value)"
                         >
                           {{ row.vaultValues[uri]?.identiconEmoji }}
@@ -1502,14 +1533,13 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                       <template v-else>
                         <span class="block max-w-[250px] overflow-x-auto align-bottom secret-scroll pb-0.5" 
                               :class="{
-                                'border-b border-rose-400': row.vaultValues[uri]?.isVulnerable,
                                 'underline decoration-wavy decoration-rose-500 decoration-2 underline-offset-4': row.vaultValues[uri]?.highestSeverity === 'Critical',
                                 'underline decoration-wavy decoration-orange-400 decoration-2 underline-offset-4': row.vaultValues[uri]?.highestSeverity === 'High'
                               }">******</span>
                         <span 
                           v-if="row.vaultValues[uri]?.identiconEmoji" 
                           class="cursor-pointer hover:scale-125 transition-transform text-lg drop-shadow-sm ml-1"
-                          :title="row.vaultValues[uri]?.isVulnerable ? row.vaultValues[uri]?.vulnerableTooltip : 'Value Identicon'"
+                          title="Value Identicon"
                           @click.stop="toggleHighlight(row.vaultValues[uri]?.value)"
                         >
                           {{ row.vaultValues[uri]?.identiconEmoji }}
@@ -1524,7 +1554,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                           'text-orange-500': row.vaultValues[uri]?.highestSeverity === 'High',
                           'text-rose-600': row.vaultValues[uri]?.highestSeverity === 'Critical'
                         }"
-                        :title="row.vaultValues[uri]?.inspections?.map(i => `[${i.severity}] ${i.ruleName}: ${i.message}`).join('\n')"
+                        :title="row.vaultValues[uri]?.inspections?.map(i => `• [${i.severity}] ${i.ruleName}: ${i.message}`).join('\n')"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
                           <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" clip-rule="evenodd" />

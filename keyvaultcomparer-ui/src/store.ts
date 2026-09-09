@@ -2,7 +2,8 @@ import { reactive } from 'vue';
 
 const state = reactive({
   recentFilters: JSON.parse(localStorage.getItem('recentFilters') || '[]') as string[],
-  nameFilter: ''
+  nameFilter: '',
+  inspectionFilter: 'Ignore' as 'Ignore' | 'Any' | 'Critical' | 'High' | 'Medium' | 'Low'
 });
 
 export const appStore = reactive({
@@ -16,6 +17,10 @@ export const appStore = reactive({
   // Actions
   setSecretNameFilter(filterText: string) {
     state.nameFilter = filterText;
+  },
+
+  setInspectionFilter(filterLevel: 'Ignore' | 'Any' | 'Critical' | 'High' | 'Medium' | 'Low') {
+    state.inspectionFilter = filterLevel;
   },
 
   applySecretNameFilter() {

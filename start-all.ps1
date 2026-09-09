@@ -19,7 +19,7 @@ Start-Sleep -Seconds 3
 
 # Start Frontend
 Write-Host "Starting Frontend UI (Vue + Vite)..." -ForegroundColor Yellow
-$frontendProcess = Start-Process -FilePath "npm" -ArgumentList "run dev" -WorkingDirectory ".\keyvaultcomparer-ui" -PassThru -NoNewWindow
+$frontendProcess = Start-Process -FilePath "npm.cmd" -ArgumentList "run dev" -WorkingDirectory ".\keyvaultcomparer-ui" -PassThru -NoNewWindow
 
 Write-Host "Services started successfully!" -ForegroundColor Green
 Write-Host "- API is running at http://localhost:5065" -ForegroundColor Green
