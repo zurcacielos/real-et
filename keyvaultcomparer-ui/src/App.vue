@@ -427,7 +427,12 @@ watch(uiSettings, (newVal) => {
   syncUrl();
 }, { deep: true });
 
-const loading = ref(false)
+const loadingValues = ref(false)
+const loadingNames = ref(false)
+const showHistoryDropdown = ref(false)
+const hideHistoryDropdown = () => {
+  setTimeout(() => { showHistoryDropdown.value = false }, 150)
+}
 const visibleSecrets = ref(new Set<string>())
 
 const highlightedValue = ref<string | null>(null)
@@ -562,7 +567,7 @@ const fetchComparison = async () => {
   if (vaultUris.value.length === 0) return
   if (!(await ensureConnected())) return;
   
-  loading.value = true
+  loadingValues.value = true
   try {
     const tasks = vaultUris.value.map(uri => fetchValuesForVault(uri))
     await Promise.all(tasks)
@@ -570,14 +575,14 @@ const fetchComparison = async () => {
     console.error('Error fetching comparison:', error)
     alert('Failed to fetch comparison data. Please try again.')
   } finally {
-    loading.value = false
+    loadingValues.value = false
   }
 }
 
 const refetchNames = async () => {
   if (vaultUris.value.length === 0) return;
   if (!(await ensureConnected())) return;
-  loading.value = true;
+  loadingNames.value = true;
   try {
     const response = await apiFetch('/api/vaults/keys', {
       method: 'POST',
@@ -594,7 +599,7 @@ const refetchNames = async () => {
     console.error('Error fetching names:', error);
     alert('Failed to fetch secret names. Please try again.');
   } finally {
-    loading.value = false;
+    loadingNames.value = false;
   }
 }
 
@@ -817,7 +822,7 @@ const fetchValuesForRow = async (secretName: string) => {
 }
 
 const fetchButtonText = computed(() => {
-  if (loading.value) return 'Fetching...';
+  if (loadingValues.value) return 'Fetching...';
   return "Fetch Visible Row's Values";
 });
 
@@ -1200,11 +1205,11 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
             <button 
               v-if="vaultUris.length > 0"
               @click="refetchNames"
-              :disabled="loading"
+              :disabled="loadingNames"
               class="ml-2 px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-200 transition-colors disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
               title="Refresh secret names without fetching values"
             >
-              <svg v-if="loading" class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <svg v-if="loadingNames" class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
               <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
               </svg>
@@ -1228,17 +1233,34 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
 
         <div class="mt-6 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6">
           <div class="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
-            <input 
-              type="text"
-              list="recent-filters"
-              v-model="uiSettings.nameFilter"
-              placeholder="Regex filter (CSV)..."
-              class="w-full md:w-64 border border-slate-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              @keyup.enter="applyFilter"
-            />
-            <datalist id="recent-filters">
-              <option v-for="f in recentFilters" :key="f" :value="f"></option>
-            </datalist>
+            <div class="relative w-full md:w-64">
+              <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-auto cursor-pointer text-slate-400 hover:text-slate-600" @click="showHistoryDropdown = !showHistoryDropdown">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <input 
+                type="text"
+                v-model="uiSettings.nameFilter"
+                placeholder="Regex filter (CSV)..."
+                class="w-full border border-slate-300 rounded-lg pl-8 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                @keyup.enter="applyFilter"
+                @focus="showHistoryDropdown = true"
+                @blur="hideHistoryDropdown"
+              />
+              <div v-if="showHistoryDropdown && recentFilters.length > 0" class="absolute z-50 w-full mt-1 bg-white border border-slate-200 shadow-lg rounded-md overflow-hidden">
+                <ul class="max-h-60 overflow-y-auto">
+                  <li 
+                    v-for="f in recentFilters" 
+                    :key="f" 
+                    @mousedown.prevent="uiSettings.nameFilter = f; showHistoryDropdown = false; applyFilter()"
+                    class="px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer font-mono truncate"
+                  >
+                    {{ f }}
+                  </li>
+                </ul>
+              </div>
+            </div>
             
             <div class="flex items-center gap-2">
               <span class="text-sm text-slate-500 font-medium">Limit:</span>
@@ -1255,11 +1277,11 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
 
             <button 
               @click="fetchComparison" 
-              :disabled="loading || vaultUris.length === 0"
+              :disabled="loadingValues || vaultUris.length === 0 || filteredResults.length === 0"
               class="w-full md:w-auto px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               :title="fetchButtonTitle"
             >
-              <svg v-if="loading" class="animate-spin -ml-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              <svg v-if="loadingValues" class="animate-spin -ml-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
               {{ fetchButtonText }}
             </button>
           </div>
