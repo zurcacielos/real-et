@@ -24,8 +24,7 @@ const apiFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
         if (input !== '/api/profile' && input !== '/api/subscriptions') {
           // If fetch fails locally because it's not defined yet, we'll use setTimeout to defer it
           setTimeout(() => {
-            fetchProfile();
-            fetchSubscriptions();
+            ensureConnected();
           }, 100);
         }
       }
@@ -737,8 +736,7 @@ const hideDropdown = () => {
 }
 
 onMounted(() => {
-  fetchProfile()
-  fetchSubscriptions()
+  ensureConnected()
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
