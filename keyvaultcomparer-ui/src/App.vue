@@ -70,6 +70,12 @@ const retryAuth = async () => {
   await ensureConnected();
 }
 
+interface InspectionResult {
+  ruleName: string;
+  severity: 'Low' | 'Medium' | 'High' | 'Critical';
+  message: string;
+}
+
 interface SecretValueStatus {
   value: string | null;
   status: string;
@@ -78,6 +84,8 @@ interface SecretValueStatus {
   isVulnerable?: boolean;
   vulnerableTooltip?: string;
   isStaged?: boolean;
+  inspections?: InspectionResult[];
+  highestSeverity?: 'Low' | 'Medium' | 'High' | 'Critical';
 }
 
 interface SecretComparisonRow {
@@ -120,27 +128,31 @@ const stagedChanges = ref<StagedChange[]>([]);
 const internalClipboard = ref<string | null>(null);
 
 interface UiSettings {
+  resultLimit: number;
   identiconsByRow: boolean;
   identiconsByCol: boolean;
-  identicolorMode: 'ByRow' | 'None';
-  statusFilter: string;
+  identicolorMode: 'None' | 'ByRow' | 'Global';
+  statusFilter: 'Any' | '=' | '≠' | 'Missing';
+  showReusedValues: boolean;
+  showStagedOnly: boolean;
+  enableInspections: boolean;
+  nameFilter: string;
   securityByRow: boolean;
   securityByCol: boolean;
-  nameFilter: string;
-  resultLimit: number;
-  showStagedOnly: boolean;
 }
 
 const defaultUiSettings: UiSettings = {
+  resultLimit: 50,
   identiconsByRow: true,
   identiconsByCol: true,
   identicolorMode: 'ByRow',
   statusFilter: 'Any',
-  securityByRow: false,
-  securityByCol: false,
+  showReusedValues: false,
+  showStagedOnly: false,
+  enableInspections: true,
   nameFilter: '',
-  resultLimit: 50,
-  showStagedOnly: false
+  securityByRow: false,
+  securityByCol: false
 };
 
 const identiconEmojis = ['⚽', '🚗', '🚀', '🍎', '🍕', '💎', '🎲', '🎸', '🌈', '🔥', '🪐', '🦄', '🌵', '🍔', '🎨', '🧩', '🎈', '🔋', '🔮', '🧬'];
@@ -224,6 +236,77 @@ const applyFilter = () => {
 
 const availableVaults = ref<DiscoveredVault[]>([])
 const loadingVaults = ref(false)
+
+const calculateEntropy = (str: string): number => {
+  if (!str) return 0;
+  const len = str.length;
+  const frequencies = new Map<string, number>();
+  for (let i = 0; i < len; i++) {
+    const char = str[i];
+    frequencies.set(char, (frequencies.get(char) || 0) + 1);
+  }
+  let entropy = 0;
+  for (const count of frequencies.values()) {
+    const p = count / len;
+    entropy -= p * Math.log2(p);
+  }
+  return entropy;
+};
+
+const DANGEROUS_PATTERNS = [
+  { regex: /-----BEGIN (RSA )?PRIVATE KEY-----/, name: 'Private Key', severity: 'Critical' as const },
+  { regex: /^eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/, name: 'JWT Token', severity: 'High' as const },
+  { regex: /AccountKey=[a-zA-Z0-9+/=]{40,}/, name: 'Azure Storage Key', severity: 'Critical' as const },
+  { regex: /xox[baprs]-[0-9a-zA-Z]{10,}/, name: 'Slack Token', severity: 'High' as const },
+  { regex: /AIza[0-9A-Za-z-_]{35}/, name: 'Google API Key', severity: 'High' as const },
+];
+
+const IGNORED_VALUES = new Set(['true', 'false', '0', '1', 'yes', 'no']);
+
+const analyzeSecret = (name: string, value: string): { inspections: InspectionResult[], highestSeverity: 'Low' | 'Medium' | 'High' | 'Critical' | undefined } => {
+  const inspections: InspectionResult[] = [];
+  if (!value || IGNORED_VALUES.has(value.toLowerCase())) return { inspections, highestSeverity: undefined };
+
+  for (const pattern of DANGEROUS_PATTERNS) {
+    if (pattern.regex.test(value)) {
+      inspections.push({ ruleName: 'Dangerous Pattern', severity: pattern.severity, message: `Matched known pattern: ${pattern.name}` });
+    }
+  }
+
+  const nameLower = name.toLowerCase();
+  const isPasswordLike = ['password', 'pwd', 'secret', 'key', 'token'].some(k => nameLower.includes(k));
+  
+  if (isPasswordLike) {
+    const entropy = calculateEntropy(value);
+    if (value.length < 8) {
+      inspections.push({ ruleName: 'Weak Secret', severity: 'High', message: 'Password-like secret is too short (< 8 chars)' });
+    } else if (entropy < 3.0) {
+      inspections.push({ ruleName: 'Low Entropy', severity: 'High', message: `Password-like secret has low entropy (${entropy.toFixed(2)})` });
+    }
+    const weakPasswords = ['123456', 'password', 'test', 'admin', 'changeme'];
+    if (weakPasswords.includes(value.toLowerCase())) {
+      inspections.push({ ruleName: 'Weak Secret', severity: 'Critical', message: 'Secret uses a highly compromised generic value' });
+    }
+  } else {
+    const entropy = calculateEntropy(value);
+    if (entropy < 2.0 && value.length > 5 && !value.includes('http')) {
+      inspections.push({ ruleName: 'Low Entropy', severity: 'Low', message: `Unusually low entropy (${entropy.toFixed(2)})` });
+    }
+  }
+
+  let highestSeverity: 'Low' | 'Medium' | 'High' | 'Critical' | undefined = undefined;
+  const severityScore = { 'Low': 1, 'Medium': 2, 'High': 3, 'Critical': 4 };
+  let maxScore = 0;
+  for (const ins of inspections) {
+    const score = severityScore[ins.severity];
+    if (score > maxScore) {
+      maxScore = score;
+      highestSeverity = ins.severity;
+    }
+  }
+
+  return { inspections, highestSeverity };
+};
 const results = computed<SecretComparisonRow[]>(() => {
   const filtered = filteredNames.value;
   
@@ -250,6 +333,14 @@ const results = computed<SecretComparisonRow[]>(() => {
         baseStatus.value = staged.newValue;
         baseStatus.status = 'Present';
         baseStatus.isStaged = true;
+      }
+      
+      if (uiSettings.value.enableInspections && baseStatus.value) {
+        const { inspections, highestSeverity } = analyzeSecret(name, baseStatus.value);
+        if (inspections.length > 0) {
+          baseStatus.inspections = inspections;
+          baseStatus.highestSeverity = highestSeverity;
+        }
       }
       
       row.vaultValues[uri] = baseStatus;
@@ -887,15 +978,20 @@ const getValueColor = (colorIndex: number | undefined) => {
 
 const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
   if (!statusObj) return '';
+  let baseClass = '';
   if (statusObj.isStaged) {
-    return 'bg-amber-50 border-l-[3px] border-l-amber-400 !border-r !border-r-amber-100 shadow-[inset_0_0_8px_rgba(251,191,36,0.15)]';
+    baseClass = 'bg-amber-50 border-l-[3px] border-l-amber-400 !border-r !border-r-amber-100 shadow-[inset_0_0_8px_rgba(251,191,36,0.15)]';
+  } else {
+    switch (statusObj.status?.toLowerCase()) {
+      case 'match': baseClass = 'bg-emerald-50/50'; break;
+      case 'mismatch': baseClass = 'bg-amber-50/50'; break;
+      case 'missing': baseClass = 'bg-rose-50/50'; break;
+    }
   }
-  switch (statusObj.status?.toLowerCase()) {
-    case 'match': return 'bg-emerald-50/50'
-    case 'mismatch': return 'bg-amber-50/50'
-    case 'missing': return 'bg-rose-50/50'
-    default: return ''
+  if (statusObj.highestSeverity === 'Critical') {
+    baseClass += ' !bg-rose-50 border-l-[3px] !border-l-rose-500 shadow-[inset_0_0_12px_rgba(225,29,72,0.15)]';
   }
+  return baseClass;
 }
 </script>
 
@@ -1174,6 +1270,13 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
         <div v-if="results.length > 0" class="mt-4 border-t border-slate-100 pt-4 flex flex-col xl:flex-row items-center justify-end gap-4 bg-slate-50/50 -mx-6 px-6 -mb-6 pb-6 rounded-b-xl">
           <div class="flex flex-wrap items-center gap-4">
             <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
+              <span class="text-sm text-slate-700 font-medium mr-1">Inspections:</span>
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors" title="Live Security Inspections (Entropy & Patterns)">
+                <input type="checkbox" v-model="uiSettings.enableInspections" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                Live Analysis
+              </label>
+            </div>
+            <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
               <span class="text-sm text-slate-700 font-medium mr-2">Identicons:</span>
               <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
                 <input type="checkbox" v-model="uiSettings.identiconsByRow" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
@@ -1364,6 +1467,21 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                           {{ row.vaultValues[uri]?.identiconEmoji }}
                         </span>
                       </template>
+                      
+                      <span 
+                        v-if="row.vaultValues[uri]?.inspections?.length"
+                        class="ml-1.5 cursor-help flex items-center justify-center rounded-full transition-transform hover:scale-110 drop-shadow-sm"
+                        :class="{
+                          'text-yellow-500': row.vaultValues[uri]?.highestSeverity === 'Low' || row.vaultValues[uri]?.highestSeverity === 'Medium',
+                          'text-orange-500': row.vaultValues[uri]?.highestSeverity === 'High',
+                          'text-rose-600': row.vaultValues[uri]?.highestSeverity === 'Critical'
+                        }"
+                        :title="row.vaultValues[uri]?.inspections?.map(i => `[${i.severity}] ${i.ruleName}: ${i.message}`).join('\n')"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
+                          <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" clip-rule="evenodd" />
+                        </svg>
+                      </span>
                     </span>
                   </div>
                 </td>
