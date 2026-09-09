@@ -1,26 +1,40 @@
-# KeyVault Comparer - Future Ideas & TODOs
+# KeyVault Comparer - Roadmap & TODOs
 
-## 1. Export Actionable Security Report (Markdown/PDF)
-- Add an "Export Security Report" button in the UI to generate a `.md` file based on the currently filtered grid.
-- Include an Executive Summary (e.g., total secrets scanned, total vaults, collisions found).
-- Include a Mermaid Diagram mapping how exposed keys connect across multiple environments/services.
-- Auto-generate Actionable Scripts (PowerShell/Azure CLI) in the report so engineers can easily verify or mitigate findings.
-  - Example: `az keyvault secret show --vault-name X --name Y`
-  - Example: `az keyvault secret set --vault-name X --name Y --value "NEW_VALUE"`
+This document outlines the priorities for improving the tool, specifically targeting the workflows of QA, DevOps, and Developers working in lower environments (DEV/QA/UAT).
 
-## 2. Risk Acceptance (Ignore False Positives)
-- Add the ability to right-click a cell and select "Mark as False Positive" or "Accept Risk".
-- Save accepted risks to `localStorage` or a config file so they stop triggering vulnerability alerts in future scans.
+## Prioridad Alta (High Priority)
 
-## 3. Entropy & Dangerous Pattern Detection
-- Add a static analysis engine on the frontend to detect secrets that aren't necessarily duplicated, but are inherently weak or dangerous:
-  - Low Entropy: Values like `12345`, `password`, or short strings.
-  - Dangerous Patterns: Hardcoded JSON, RSA Private Keys (e.g., `-----BEGIN RSA PRIVATE KEY-----`), JWT tokens in non-production environments.
+### 1. Secret Metadata: Last Used & Expiration
+- **Problem:** DevOps needs to identify orphaned secrets or credentials that are about to expire.
+- **Action:** Fetch and display metadata (Last Used timestamp, Expiration Date) for each secret.
+- **UI:** Display this metadata contextually (e.g., an hourglass icon for expiring secrets, or directly in the cell header).
 
-## 4. Direct Administration Actions (Write Operations)
-- Add endpoints to the C# API (e.g., `POST /api/vaults/keys`) to manage secrets directly from the grid.
-- **Rotate Secret:** Button to generate a new secure random string and push it to all selected environments simultaneously.
-- **Sync Environments:** Button to copy a missing secret value from one environment (e.g., DEV) directly to another (e.g., UAT).
+### 2. Anti-Production Visual Warnings
+- **Problem:** We want to prevent accidental modifications to Production environments since this tool targets lower environments.
+- **Action:** Implement a safeguard that parses the vault name (looking for `prod`, `prd`, `production`, etc.).
+- **UI:** If a production vault is selected, clearly warn the user by highlighting the column header in bold red and displaying a warning/lock icon.
 
-## 5. UI/UX Tweaks
-- **Highlight On Click Sync:** Sync the "click-to-highlight" behavior with the Identicon Checkboxes (if "By Row" is selected, highlight only matches in the same row, etc.).
+---
+
+## Prioridad Media (Medium Priority)
+
+### 3. Project Workspaces (Session State)
+- **Problem:** Developers and QA often compare the exact same 3-4 vaults every day. Re-selecting subscriptions and vaults on every page reload is tedious.
+- **Action:** Implement a `New, Open, Save` project management system.
+- **Mechanism:** Allow users to save their current selections (Subscription, Vaults, regex filters) into a local configuration file (e.g., a `.json` file) and load it later to restore the workspace instantly.
+
+### 4. Soft-Delete / Row Hiding
+- **Problem:** QA might only be interested in 5 specific secrets out of a 300-secret list, but the regex filter isn't always enough to isolate them perfectly.
+- **Action:** Add a local "Soft Delete" or "Hide" mechanism.
+- **UI:** A button (e.g., an eye with a slash) on each row to temporarily hide it from the grid during the current session.
+
+---
+
+## Backlog / Prioridad Baja (Low Priority)
+
+### 5. Risk Acceptance (False Positives)
+- Allow users to right-click a Security Inspection warning (Entropy/Dangerous Pattern) and mark it as "Accepted Risk". 
+- Save this preference locally so the alert doesn't show up in future sessions.
+
+### 6. Export Security Reports
+- Export the current view (including security warnings and staged changes) to a Markdown/PDF/CSV report to attach to Jira tickets for QA certification.
