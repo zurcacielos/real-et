@@ -1067,12 +1067,18 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
             <div 
               v-for="(uri, index) in vaultUris" 
               :key="uri" 
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-sm font-medium border border-blue-200"
+              class="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-xl text-sm font-medium border border-blue-200 shadow-sm"
             >
-              <span>{{ getVaultName(uri) }}</span>
+              <div class="flex flex-col text-left py-0.5">
+                <span class="leading-tight">{{ getVaultName(uri) }}</span>
+                <span class="text-[10px] text-blue-500 font-normal leading-none mt-0.5" style="letter-spacing: 0;">
+                  {{ knownSecretNames[uri]?.length || 0 }} secrets
+                  <template v-if="lastFetched[uri]">• {{ getRelativeTime(lastFetched[uri]) }}</template>
+                </span>
+              </div>
               <button 
                 @click="removeVault(index)" 
-                class="text-blue-400 hover:text-blue-700 focus:outline-none transition-colors"
+                class="text-blue-400 hover:text-blue-700 focus:outline-none transition-colors ml-1"
                 title="Remove"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -1239,13 +1245,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 <th class="px-6 py-4 font-semibold tracking-wider sticky left-[48px] z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]">Secret Name</th>
                 <th v-for="uri in vaultUris" :key="uri" class="px-6 py-4 font-semibold tracking-wider bg-slate-50">
                   <div class="flex items-center justify-between">
-                    <div class="flex flex-col text-left">
-                      <span class="text-slate-900">{{ getVaultName(uri) }}</span>
-                      <span class="text-[11px] text-slate-500 font-normal mt-0.5" style="letter-spacing: 0;">
-                        {{ knownSecretNames[uri]?.length || 0 }} secrets
-                        <template v-if="lastFetched[uri]">• {{ getRelativeTime(lastFetched[uri]) }}</template>
-                      </span>
-                    </div>
+                    <span class="text-slate-900">{{ getVaultName(uri) }}</span>
                     <button 
                       @click="fetchValuesForVault(uri)" 
                       class="text-slate-400 hover:text-blue-600 transition-colors bg-white rounded-full p-1 shadow-sm border border-slate-200"
