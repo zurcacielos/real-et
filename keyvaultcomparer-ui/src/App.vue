@@ -1330,7 +1330,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
               <select 
                 :value="appStore.state.inspectionFilter"
                 @change="appStore.setInspectionFilter(($event.target as HTMLSelectElement).value as any)"
-                class="bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700 h-[34px]"
+                class="bg-transparent border-none py-0 pl-1 pr-8 text-sm focus:outline-none focus:ring-0 text-slate-700 cursor-pointer"
               >
                 <option value="Ignore">Ignore (All)</option>
                 <option value="Any">Any Level</option>
