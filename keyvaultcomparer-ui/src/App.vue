@@ -892,25 +892,47 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
 
         <div class="h-5 w-px bg-slate-200 mx-1"></div>
 
-        <div class="flex items-center gap-3" v-if="profile">
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-slate-500 font-medium uppercase tracking-wider hidden md:block">Sub:</span>
-            <select 
-              v-model="selectedSubscriptionId"
-              class="border-none bg-transparent px-1 py-1 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-0 w-32 sm:w-48 truncate cursor-pointer hover:bg-slate-50 rounded"
+        <div class="flex items-center gap-3">
+          <template v-if="profile && profile.email !== 'Unknown User'">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-500 font-medium uppercase tracking-wider hidden md:block">Sub:</span>
+              <select 
+                v-model="selectedSubscriptionId"
+                class="border-none bg-transparent px-1 py-1 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-0 w-32 sm:w-48 truncate cursor-pointer hover:bg-slate-50 rounded"
+              >
+                <option value="">All Subscriptions</option>
+                <option v-for="sub in subscriptions" :key="sub.id" :value="sub.id">
+                  {{ sub.name }}
+                </option>
+              </select>
+            </div>
+            <div 
+              class="h-8 w-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-inner text-sm"
+              :title="profile.email"
             >
-              <option value="">All Subscriptions</option>
-              <option v-for="sub in subscriptions" :key="sub.id" :value="sub.id">
-                {{ sub.name }}
-              </option>
-            </select>
-          </div>
-          <div 
-            class="h-8 w-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-inner text-sm"
-            :title="profile.email"
-          >
-            {{ profile.initials }}
-          </div>
+              {{ profile.initials }}
+            </div>
+          </template>
+          <template v-else>
+            <button 
+              @click="retryAuth" 
+              class="flex items-center gap-1 text-sm font-semibold text-amber-600 bg-amber-50 px-2 py-1.5 rounded-lg hover:bg-amber-100 transition-colors border border-amber-200 shadow-sm"
+              title="Reconnect to Azure"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reconnect
+            </button>
+            <div 
+              class="h-8 w-8 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center shadow-inner"
+              title="Not Connected"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+          </template>
         </div>
       </div>
     </header>
