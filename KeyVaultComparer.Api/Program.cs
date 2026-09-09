@@ -50,8 +50,10 @@ app.Use(async (context, next) =>
     }
     catch (Exception ex) when (ex is Azure.Identity.CredentialUnavailableException || 
                                ex is Azure.Identity.AuthenticationFailedException ||
-                               ex.Message.Contains("az login", StringComparison.OrdinalIgnoreCase) ||
-                               ex.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase))
+                               ex.ToString().Contains("az login", StringComparison.OrdinalIgnoreCase) ||
+                               ex.ToString().Contains("AADSTS", StringComparison.OrdinalIgnoreCase) ||
+                               ex.ToString().Contains("interactive authentication", StringComparison.OrdinalIgnoreCase) ||
+                               ex.ToString().Contains("refresh token", StringComparison.OrdinalIgnoreCase))
     {
         context.Response.StatusCode = 401;
         context.Response.ContentType = "application/json";
