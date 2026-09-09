@@ -1147,42 +1147,9 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
               {{ fetchButtonText }}
             </button>
           </div>
-          
-          <div v-if="results.length > 0" class="flex flex-col sm:flex-row items-center gap-4">
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-slate-500 font-medium">Vault Equality:</span>
-              <select 
-                v-model="uiSettings.statusFilter" 
-                class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Any">Any</option>
-                <option value="Match">Exact Match</option>
-                <option value="Mismatch">Differences</option>
-                <option value="Missing">Missing</option>
-              </select>
-            </div>
-            <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
-              <span class="text-sm text-slate-500 font-medium mr-1">Reused:</span>
-              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
-                <input type="checkbox" v-model="uiSettings.securityByRow" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-                By Row
-              </label>
-              <div class="w-px h-4 bg-slate-200"></div>
-              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
-                <input type="checkbox" v-model="uiSettings.securityByCol" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-                By Col
-              </label>
-            </div>
-            <div class="flex items-center gap-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg px-3 py-1.5 h-[34px] ml-auto">
-              <label class="flex items-center gap-1.5 text-sm font-medium cursor-pointer hover:text-amber-900 transition-colors">
-                <input type="checkbox" v-model="uiSettings.showStagedOnly" class="rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer" />
-                Show Staged Only
-              </label>
-            </div>
-          </div>
         </div>
 
-        <div v-if="results.length > 0" class="mt-4 border-t border-slate-100 pt-4 flex flex-col sm:flex-row items-center gap-4 bg-slate-50/50 -mx-6 px-6 -mb-6 pb-6 rounded-b-xl">
+        <div v-if="results.length > 0" class="mt-4 border-t border-slate-100 pt-4 flex flex-col xl:flex-row items-center justify-between gap-4 bg-slate-50/50 -mx-6 px-6 -mb-6 pb-6 rounded-b-xl">
           <div class="flex flex-wrap items-center gap-4">
             <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
               <span class="text-sm text-slate-700 font-medium mr-2">Identicons:</span>
@@ -1196,15 +1163,67 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 By Col
               </label>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 h-[34px]">
               <span class="text-sm text-slate-700 font-medium">Identicolor:</span>
               <select 
                 v-model="uiSettings.identicolorMode" 
-                class="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700"
+                class="bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-full text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700"
               >
                 <option value="ByRow">By Row (Matches)</option>
                 <option value="None">None</option>
               </select>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-end gap-4 ml-auto w-full xl:w-auto">
+            <div class="flex items-center gap-3 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
+              <span class="text-sm text-slate-700 font-medium mr-1">Vault Equality:</span>
+              
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="radio" value="Any" v-model="uiSettings.statusFilter" class="border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                Any
+              </label>
+              
+              <div class="w-px h-4 bg-slate-200"></div>
+              
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="radio" value="Match" v-model="uiSettings.statusFilter" class="border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                <span class="font-bold">=</span>
+              </label>
+              
+              <div class="w-px h-4 bg-slate-200"></div>
+              
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="radio" value="Mismatch" v-model="uiSettings.statusFilter" class="border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                <span class="font-bold">≠</span>
+              </label>
+              
+              <div class="w-px h-4 bg-slate-200"></div>
+              
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="radio" value="Missing" v-model="uiSettings.statusFilter" class="border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                Missing
+              </label>
+            </div>
+
+            <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
+              <span class="text-sm text-slate-700 font-medium mr-1">Reused:</span>
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="checkbox" v-model="uiSettings.securityByRow" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                By Row
+              </label>
+              <div class="w-px h-4 bg-slate-200"></div>
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="checkbox" v-model="uiSettings.securityByCol" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                By Col
+              </label>
+            </div>
+
+            <div class="flex items-center gap-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg px-3 py-1.5 h-[34px]">
+              <label class="flex items-center gap-1.5 text-sm font-medium cursor-pointer hover:text-amber-900 transition-colors">
+                <input type="checkbox" v-model="uiSettings.showStagedOnly" class="rounded border-amber-300 text-amber-600 focus:ring-amber-500 cursor-pointer" />
+                Show Staged Only
+              </label>
             </div>
           </div>
         </div>
