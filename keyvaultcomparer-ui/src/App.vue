@@ -452,7 +452,7 @@ watch(selectedSubscriptionId, async (newId) => {
       }
     } catch(e) {}
   }
-})
+}, { immediate: true })
 
 const fetchComparison = async () => {
   if (vaultUris.value.length === 0) return
