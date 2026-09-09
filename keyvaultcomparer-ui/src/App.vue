@@ -180,6 +180,34 @@ watch(vaultUris, (newVal) => {
   localStorage.setItem('savedVaultUris', JSON.stringify(newVal));
   syncUrl();
 }, { deep: true });
+const lastFetched = ref<Record<string, number>>({});
+const currentTime = ref(Date.now());
+setInterval(() => { currentTime.value = Date.now(); }, 60000);
+
+const getRelativeTime = (timestamp: number) => {
+  const diff = Math.floor((currentTime.value - timestamp) / 60000); // in minutes
+  if (diff < 1) return 'just now';
+  if (diff === 1) return '1 min ago';
+  if (diff < 60) return `${diff} mins ago`;
+  const hours = Math.floor(diff / 60);
+  if (hours === 1) return '1 hour ago';
+  if (hours < 24) return `${hours} hours ago`;
+  return '1+ day ago';
+};
+
+const totalVaultsCount = ref<number | null>(null);
+const recentFilters = ref<string[]>(JSON.parse(localStorage.getItem('recentFilters') || '[]'));
+
+const applyFilter = () => {
+  const f = uiSettings.value.nameFilter.trim();
+  if (f) {
+    const newHistory = [f, ...recentFilters.value.filter(x => x !== f)].slice(0, 10);
+    recentFilters.value = newHistory;
+    localStorage.setItem('recentFilters', JSON.stringify(newHistory));
+  }
+  fetchComparison();
+};
+
 const availableVaults = ref<DiscoveredVault[]>([])
 const loadingVaults = ref(false)
 const results = computed<SecretComparisonRow[]>(() => {
@@ -411,9 +439,19 @@ const colUsageCount = computed(() => {
 const subscriptions = ref<Array<{id: string, name: string}>>([])
 const selectedSubscriptionId = ref(localStorage.getItem('selectedSub') || '')
 
-watch(selectedSubscriptionId, (newId) => {
+watch(selectedSubscriptionId, async (newId) => {
   localStorage.setItem('selectedSub', newId)
   availableVaults.value = [] // Clear old vault options since the sub changed
+  totalVaultsCount.value = null;
+  if (newId) {
+    try {
+      const response = await apiFetch(`/api/vaults?subscriptionId=${encodeURIComponent(newId)}`);
+      if (response.ok) {
+        const vaults = await response.json();
+        totalVaultsCount.value = vaults.length;
+      }
+    } catch(e) {}
+  }
 })
 
 const fetchComparison = async () => {
@@ -651,6 +689,7 @@ const fetchValuesForVaultAndNames = async (uri: string, namesToFetch: string[]) 
       const data = await response.json()
       // Merge with existing
       vaultData.value[uri] = { ...vaultData.value[uri], ...data }
+      lastFetched.value[uri] = Date.now()
     } else {
       console.error('Failed to fetch values for vault', uri)
     }
@@ -930,6 +969,9 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 <option value="">All Subscriptions</option>
                 <option v-for="sub in subscriptions" :key="sub.id" :value="sub.id">
                   {{ sub.name }}
+                  <template v-if="totalVaultsCount !== null && selectedSubscriptionId === sub.id">
+                    ({{ totalVaultsCount }} vaults)
+                  </template>
                 </option>
               </select>
             </div>
@@ -1072,11 +1114,15 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
           <div class="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
             <input 
               type="text"
+              list="recent-filters"
               v-model="uiSettings.nameFilter"
               placeholder="Regex filter (CSV)..."
               class="w-full md:w-64 border border-slate-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              @keyup.enter="fetchComparison"
+              @keyup.enter="applyFilter"
             />
+            <datalist id="recent-filters">
+              <option v-for="f in recentFilters" :key="f" :value="f"></option>
+            </datalist>
             
             <div class="flex items-center gap-2">
               <span class="text-sm text-slate-500 font-medium">Limit:</span>
@@ -1173,8 +1219,14 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 <th class="w-12 px-4 py-4 text-center sticky left-0 z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]"></th>
                 <th class="px-6 py-4 font-semibold tracking-wider sticky left-[48px] z-30 bg-slate-50 shadow-[1px_0_0_0_#e2e8f0]">Secret Name</th>
                 <th v-for="uri in vaultUris" :key="uri" class="px-6 py-4 font-semibold tracking-wider bg-slate-50">
-                  <div class="flex items-center gap-2">
-                    <span>{{ getVaultName(uri) }}</span>
+                  <div class="flex items-center justify-between">
+                    <div class="flex flex-col text-left">
+                      <span class="text-slate-900">{{ getVaultName(uri) }}</span>
+                      <span class="text-[11px] text-slate-500 font-normal mt-0.5" style="letter-spacing: 0;">
+                        {{ knownSecretNames[uri]?.length || 0 }} secrets
+                        <template v-if="lastFetched[uri]">• {{ getRelativeTime(lastFetched[uri]) }}</template>
+                      </span>
+                    </div>
                     <button 
                       @click="fetchValuesForVault(uri)" 
                       class="text-slate-400 hover:text-blue-600 transition-colors bg-white rounded-full p-1 shadow-sm border border-slate-200"
