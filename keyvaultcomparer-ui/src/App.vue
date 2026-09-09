@@ -1416,7 +1416,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr v-for="row in filteredResults" :key="row.secretName" class="hover:bg-slate-50/50 transition-colors group">
+              <tr v-for="(row, index) in filteredResults" :key="row.secretName" class="hover:bg-slate-50/50 transition-colors group">
                 <td class="px-4 py-4 text-center border-r border-slate-100 sticky left-0 z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9]">
                   <button 
                     @click="toggleVisibility(row.secretName)"
@@ -1435,7 +1435,10 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 </td>
                 <td class="px-6 py-4 font-medium text-slate-900 border-r border-slate-100 sticky left-[48px] z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9] group/namecell">
                   <div class="flex items-center justify-between">
-                    <span class="truncate pr-2">{{ row.secretName }}</span>
+                    <div class="flex items-center gap-3 truncate">
+                      <span class="text-xs text-slate-400 font-normal w-6 shrink-0 text-right">{{ index + 1 }}</span>
+                      <span class="truncate pr-2" :title="row.secretName">{{ row.secretName }}</span>
+                    </div>
                     <button 
                       @click="fetchValuesForRow(row.secretName)"
                       class="text-slate-400 hover:text-blue-600 transition-colors bg-white rounded-full p-1.5 shadow-sm border border-slate-200 opacity-0 group-hover/namecell:opacity-100 flex-shrink-0"
