@@ -86,6 +86,11 @@ namespace KeyVaultComparer.Api.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Error fetching vaults from Resource Graph: {ex.Message}");
+                if (ex is AuthenticationFailedException || ex is CredentialUnavailableException || 
+                    ex.ToString().Contains("AADSTS") || ex.ToString().Contains("az login"))
+                {
+                    throw;
+                }
             }
 
             return vaults;
@@ -109,6 +114,11 @@ namespace KeyVaultComparer.Api.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Error fetching subscriptions: {ex.Message}");
+                if (ex is AuthenticationFailedException || ex is CredentialUnavailableException || 
+                    ex.ToString().Contains("AADSTS") || ex.ToString().Contains("az login"))
+                {
+                    throw;
+                }
             }
             return subs;
         }

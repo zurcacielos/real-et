@@ -74,6 +74,11 @@ namespace KeyVaultComparer.Api.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Error fetching profile via injected credential: {ex.Message}");
+                if (ex is AuthenticationFailedException || ex is CredentialUnavailableException || 
+                    ex.ToString().Contains("AADSTS") || ex.ToString().Contains("az login"))
+                {
+                    throw; // Bubble up to trigger 401 in middleware
+                }
             }
 
             return profile;

@@ -44,6 +44,11 @@ namespace KeyVaultComparer.Api.Services
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error fetching properties from {uri}: {ex.Message}");
+                    if (ex is AuthenticationFailedException || ex is CredentialUnavailableException || 
+                        ex.ToString().Contains("AADSTS") || ex.ToString().Contains("az login"))
+                    {
+                        throw;
+                    }
                     results[uri] = vaultNames;
                 }
             });
@@ -101,6 +106,11 @@ namespace KeyVaultComparer.Api.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"Error creating client for {vaultUri}: {ex.Message}");
+                if (ex is AuthenticationFailedException || ex is CredentialUnavailableException || 
+                    ex.ToString().Contains("AADSTS") || ex.ToString().Contains("az login"))
+                {
+                    throw;
+                }
             }
 
             return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
