@@ -1036,15 +1036,15 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
           
           <div v-if="results.length > 0" class="flex flex-col sm:flex-row items-center gap-4">
             <div class="flex items-center gap-2">
-              <span class="text-sm text-slate-500 font-medium">Status:</span>
+              <span class="text-sm text-slate-500 font-medium">Vault Equality:</span>
               <select 
                 v-model="uiSettings.statusFilter" 
                 class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="Any">Any</option>
-                <option value="Match">Exact Matches</option>
+                <option value="Match">Exact Match</option>
                 <option value="Mismatch">Differences</option>
-                <option value="Missing">Missing Secrets</option>
+                <option value="Missing">Missing</option>
               </select>
             </div>
             <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
@@ -1177,7 +1177,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                     </span>
                     <span v-else class="font-mono tracking-widest font-semibold flex items-center gap-2 px-1.5 py-0.5 rounded transition-all duration-200" :class="[uiSettings.identicolorMode === 'ByRow' ? getValueColor(row.vaultValues[uri]?.colorIndex) : '', {'bg-yellow-100 ring-2 ring-yellow-400 shadow-sm': highlightedValue === row.vaultValues[uri]?.value}]">
                       <template v-if="visibleSecrets.has(row.secretName)">
-                        <span class="tracking-normal" :class="{'border-b border-rose-400': row.vaultValues[uri]?.isVulnerable}">{{ row.vaultValues[uri]?.value }}</span>
+                        <span class="tracking-normal block max-w-[250px] overflow-x-auto align-bottom secret-scroll pb-0.5" :class="{'border-b border-rose-400': row.vaultValues[uri]?.isVulnerable}">{{ row.vaultValues[uri]?.value }}</span>
                         <span 
                           v-if="row.vaultValues[uri]?.identiconEmoji" 
                           class="cursor-pointer hover:scale-125 transition-transform text-lg drop-shadow-sm ml-1"
@@ -1188,7 +1188,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                         </span>
                       </template>
                       <template v-else>
-                        <span :class="{'border-b border-rose-400': row.vaultValues[uri]?.isVulnerable}">******</span>
+                        <span class="block max-w-[250px] overflow-x-auto align-bottom secret-scroll pb-0.5" :class="{'border-b border-rose-400': row.vaultValues[uri]?.isVulnerable}">******</span>
                         <span 
                           v-if="row.vaultValues[uri]?.identiconEmoji" 
                           class="cursor-pointer hover:scale-125 transition-transform text-lg drop-shadow-sm ml-1"
@@ -1404,3 +1404,20 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
 
   </div>
 </template>
+
+<style>
+/* Custom thin scrollbar for secret values */
+.secret-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.secret-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.secret-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 10px;
+}
+.secret-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+}
+</style>
