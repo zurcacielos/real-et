@@ -1053,13 +1053,16 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 By Col
               </label>
             </div>
-            <select 
-              v-model="uiSettings.identicolorMode" 
-              class="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700"
-            >
-              <option value="ByRow">Identicolor: By Row (Matches)</option>
-              <option value="None">Identicolor: None</option>
-            </select>
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-slate-700 font-medium">Identicolor:</span>
+              <select 
+                v-model="uiSettings.identicolorMode" 
+                class="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700"
+              >
+                <option value="ByRow">By Row (Matches)</option>
+                <option value="None">None</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
