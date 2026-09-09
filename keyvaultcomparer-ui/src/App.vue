@@ -17,8 +17,18 @@ const apiFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const cloned = response.clone();
       const errorText = await cloned.text().catch(() => '');
       globalError.value = `Backend Error: ${response.status} ${response.statusText} - ${errorText.substring(0, 100)}`;
-    } else {
       globalError.value = null; // Clear on success
+      
+      // Auto-recovery for profile and subscriptions if a data call succeeds but auth state is broken
+      if (!profile.value || profile.value.email === 'Unknown User') {
+        if (input !== '/api/profile' && input !== '/api/subscriptions') {
+          // If fetch fails locally because it's not defined yet, we'll use setTimeout to defer it
+          setTimeout(() => {
+            fetchProfile();
+            fetchSubscriptions();
+          }, 100);
+        }
+      }
     }
     return response
   } catch (e: any) {
@@ -819,11 +829,20 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
         </svg>
         <span class="font-medium">{{ globalError }}</span>
       </div>
-      <button @click="globalError = null" class="text-white hover:text-rose-200 transition-colors focus:outline-none">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-        </svg>
-      </button>
+      <div class="flex items-center gap-3">
+        <!-- Manual Refresh Button -->
+        <button @click="retryAuth" class="text-white hover:text-rose-200 transition-colors focus:outline-none flex items-center gap-1 text-xs font-semibold uppercase tracking-wider" title="Retry Auth & Fetch">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Retry
+        </button>
+        <button @click="globalError = null" class="text-white hover:text-rose-200 transition-colors focus:outline-none">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </div>
     </div>
     <!-- Top App Bar -->
     <header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 shrink-0 shadow-sm z-30 relative">
