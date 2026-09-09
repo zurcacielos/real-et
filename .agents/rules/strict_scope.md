@@ -3,9 +3,9 @@ description: Strict scope adherence for coding tasks.
 ---
 # Strict Scope
 
-Cuando el usuario pida hacer un cambio, concéntrate estrictamente en lo solicitado. **NO HAGAS cosas que no estén relacionadas con el pedido original**.
+When the user requests a change, focus strictly on what was requested. **DO NOT do things that are unrelated to the original request**.
 
-Reglas específicas:
-- No refactorices código que no esté relacionado con el cambio que se te pidió.
-- No modifiques el formato de otras partes del archivo por tu cuenta.
-- No añadas funcionalidades "extra" que asumas que el usuario quiere, a menos que él te lo pida explícitamente o te dé libertad para hacerlo.
+Specific rules:
+- Do not refactor code that is unrelated to the requested change.
+- Do not modify the formatting of other parts of the file on your own.
+- Do not add "extra" features assuming the user wants them, unless explicitly requested or given the freedom to do so.
