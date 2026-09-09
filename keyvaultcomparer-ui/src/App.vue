@@ -614,15 +614,14 @@ const forgetAllNames = () => {
   knownSecretNames.value = {};
 }
 
-const fetchValuesForVault = async (uri: string) => {
+const fetchValuesForVaultAndNames = async (uri: string, namesToFetch: string[]) => {
+  if (namesToFetch.length === 0) return;
   if (!vaultData.value[uri]) {
     vaultData.value[uri] = {};
   }
   
-  // Set status to loading for visible names
-  const namesToFetch = filteredNames.value.slice(0, uiSettings.value.resultLimit > 0 ? uiSettings.value.resultLimit : undefined);
   namesToFetch.forEach(name => {
-    vaultData.value[uri][name] = { value: null, status: 'Loading' };
+    vaultData.value[uri][name] = { ...vaultData.value[uri][name], value: null, status: 'Loading' };
   });
 
   try {
@@ -643,7 +642,22 @@ const fetchValuesForVault = async (uri: string) => {
       console.error('Failed to fetch values for vault', uri)
     }
   } catch (error) {
-    console.error(error)
+    console.error('Network error fetching values for vault', uri, error)
+  }
+}
+
+const fetchValuesForVault = async (uri: string) => {
+  const namesToFetch = filteredNames.value.slice(0, uiSettings.value.resultLimit > 0 ? uiSettings.value.resultLimit : undefined);
+  await fetchValuesForVaultAndNames(uri, namesToFetch);
+}
+
+const fetchValuesForRow = async (secretName: string) => {
+  if (vaultUris.value.length === 0) return;
+  try {
+    const tasks = vaultUris.value.map(uri => fetchValuesForVaultAndNames(uri, [secretName]));
+    await Promise.all(tasks);
+  } catch (error) {
+    console.error('Error fetching values for row:', error);
   }
 }
 
@@ -1179,8 +1193,19 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                     </svg>
                   </button>
                 </td>
-                <td class="px-6 py-4 font-medium text-slate-900 border-r border-slate-100 sticky left-[48px] z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9]">
-                  {{ row.secretName }}
+                <td class="px-6 py-4 font-medium text-slate-900 border-r border-slate-100 sticky left-[48px] z-10 bg-white group-hover:bg-slate-50/50 shadow-[1px_0_0_0_#f1f5f9] group/namecell">
+                  <div class="flex items-center justify-between">
+                    <span class="truncate pr-2">{{ row.secretName }}</span>
+                    <button 
+                      @click="fetchValuesForRow(row.secretName)"
+                      class="text-slate-400 hover:text-blue-600 transition-colors bg-white rounded-full p-1.5 shadow-sm border border-slate-200 opacity-0 group-hover/namecell:opacity-100 flex-shrink-0"
+                      title="Fetch values for this row"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                  </div>
                 </td>
                 <td 
                   v-for="uri in vaultUris" 
