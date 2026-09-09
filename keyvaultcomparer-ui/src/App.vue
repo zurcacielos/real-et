@@ -39,14 +39,21 @@ const apiFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
 }
 
-const retryAuth = () => {
-  showAuthError.value = false
-  fetchProfile()
-  fetchSubscriptions()
-  if (vaultUris.value.length > 0) {
-    fetchVaultKeys()
-    fetchComparison()
+const isConnected = computed(() => !!(profile.value && profile.value.email !== 'Unknown User'));
+
+const ensureConnected = async (): Promise<boolean> => {
+  if (isConnected.value) return true;
+  globalError.value = null;
+  await Promise.all([fetchProfile(), fetchSubscriptions()]);
+  if (!isConnected.value && !showAuthError.value) {
+    globalError.value = "Failed to connect to Azure. Please verify your authentication via az login.";
   }
+  return isConnected.value;
+}
+
+const retryAuth = async () => {
+  showAuthError.value = false;
+  await ensureConnected();
 }
 
 interface SecretValueStatus {
@@ -411,6 +418,7 @@ watch(selectedSubscriptionId, (newId) => {
 
 const fetchComparison = async () => {
   if (vaultUris.value.length === 0) return
+  if (!(await ensureConnected())) return;
   
   loading.value = true
   try {
@@ -426,6 +434,7 @@ const fetchComparison = async () => {
 
 const refetchNames = async () => {
   if (vaultUris.value.length === 0) return;
+  if (!(await ensureConnected())) return;
   loading.value = true;
   try {
     const response = await apiFetch('/api/vaults/keys', {
@@ -452,6 +461,7 @@ const fetchVaultKeys = async () => {
     knownSecretNames.value = {};
     return;
   }
+  if (!(await ensureConnected())) return;
   try {
     const response = await apiFetch('/api/vaults/keys', {
       method: 'POST',
@@ -532,8 +542,10 @@ const fetchSubscriptions = async () => {
   }
 }
 
-const searchVaults = () => {
+const searchVaults = async () => {
   if (debounceTimer) clearTimeout(debounceTimer)
+  
+  if (!(await ensureConnected())) return;
   
   const query = searchQuery.value.trim()
   if (query.length < 2) {
@@ -616,6 +628,7 @@ const forgetAllNames = () => {
 
 const fetchValuesForVaultAndNames = async (uri: string, namesToFetch: string[]) => {
   if (namesToFetch.length === 0) return;
+  if (!(await ensureConnected())) return;
   if (!vaultData.value[uri]) {
     vaultData.value[uri] = {};
   }
