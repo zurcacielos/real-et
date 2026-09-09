@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { appStore } from './store'
 
 const currentTab = ref<'dashboard' | 'staged' | 'logs'>('dashboard')
 const showHelpDialog = ref(false)
@@ -135,7 +136,6 @@ interface UiSettings {
   showReusedValues: boolean;
   showStagedOnly: boolean;
   enableInspections: boolean;
-  nameFilter: string;
   securityByRow: boolean;
   securityByCol: boolean;
 }
@@ -149,7 +149,6 @@ const defaultUiSettings: UiSettings = {
   showReusedValues: false,
   showStagedOnly: false,
   enableInspections: true,
-  nameFilter: '',
   securityByRow: false,
   securityByCol: false
 };
@@ -183,7 +182,7 @@ const urlConfig = loadSharableConfig();
 
 const syncUrl = () => {
   try {
-    const payload = { u: uiSettings.value, v: vaultUris.value };
+    const payload = { u: uiSettings.value, v: vaultUris.value, f: appStore.state.nameFilter };
     const encoded = btoa(JSON.stringify(payload));
     const newUrl = new URL(window.location.href);
     newUrl.searchParams.set('s', encoded);
@@ -221,15 +220,8 @@ const getRelativeTime = (timestamp: number) => {
 };
 
 const totalVaultsCount = ref<number | null>(null);
-const recentFilters = ref<string[]>(JSON.parse(localStorage.getItem('recentFilters') || '[]'));
-
-const applyFilter = () => {
-  const f = uiSettings.value.nameFilter.trim();
-  if (f) {
-    const newHistory = [f, ...recentFilters.value.filter(x => x !== f)].slice(0, 10);
-    recentFilters.value = newHistory;
-    localStorage.setItem('recentFilters', JSON.stringify(newHistory));
-  }
+const onFilterSubmit = () => {
+  appStore.applySecretNameFilter();
   fetchComparison();
 };
 
@@ -419,6 +411,9 @@ const loadUiSettings = (): UiSettings => {
   if (urlConfig && urlConfig.u) {
     base = { ...base, ...urlConfig.u };
   }
+  if (urlConfig && urlConfig.f !== undefined) {
+    appStore.setSecretNameFilter(urlConfig.f);
+  }
   return base;
 };
 const uiSettings = ref<UiSettings>(loadUiSettings());
@@ -426,6 +421,10 @@ watch(uiSettings, (newVal) => {
   localStorage.setItem('uiSettings', JSON.stringify(newVal));
   syncUrl();
 }, { deep: true });
+
+watch(() => appStore.state.nameFilter, () => {
+  syncUrl();
+});
 
 const loadingValues = ref(false)
 const loadingNames = ref(false)
@@ -567,7 +566,7 @@ const fetchComparison = async () => {
   if (vaultUris.value.length === 0) return
   if (!(await ensureConnected())) return;
   
-  applyFilter();
+  appStore.applySecretNameFilter();
   
   loadingValues.value = true
   try {
@@ -643,8 +642,8 @@ const allSortedNames = computed(() => {
 const filteredNames = computed(() => {
   let names = allSortedNames.value;
 
-  if (uiSettings.value.nameFilter.trim()) {
-    const filters = uiSettings.value.nameFilter.split(',').map(f => f.trim()).filter(f => f);
+  if (appStore.state.nameFilter.trim()) {
+    const filters = appStore.state.nameFilter.split(',').map(f => f.trim()).filter(f => f);
     
     // Pre-compile regexes outside the loop to prevent UI freezing
     const compiledFilters = filters.map(f => {
@@ -1257,20 +1256,21 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
               </div>
               <input 
                 type="text"
-                v-model="uiSettings.nameFilter"
+                :value="appStore.state.nameFilter"
+                @input="appStore.setSecretNameFilter(($event.target as HTMLInputElement).value)"
                 placeholder="Regex filter (CSV)..."
                 class="w-full border border-slate-300 rounded-lg pl-8 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                @keyup.enter="applyFilter; showHistoryDropdown = false"
+                @keyup.enter="onFilterSubmit(); showHistoryDropdown = false"
                 @keydown.esc="showHistoryDropdown = false"
                 @focus="showHistoryDropdown = true"
                 @blur="hideHistoryDropdown"
               />
-              <div v-if="showHistoryDropdown && recentFilters.filter(x => x !== uiSettings.nameFilter).length > 0" class="absolute z-50 w-full mt-1 bg-white border border-slate-200 shadow-lg rounded-md overflow-hidden">
+              <div v-if="showHistoryDropdown && appStore.availableRecentFilters.length > 0" class="absolute z-50 w-full mt-1 bg-white border border-slate-200 shadow-lg rounded-md overflow-hidden">
                 <ul class="max-h-60 overflow-y-auto">
                   <li 
-                    v-for="f in recentFilters.filter(x => x !== uiSettings.nameFilter)" 
+                    v-for="f in appStore.availableRecentFilters" 
                     :key="f" 
-                    @mousedown.prevent="uiSettings.nameFilter = f; showHistoryDropdown = false; applyFilter()"
+                    @mousedown.prevent="appStore.setSecretNameFilter(f); showHistoryDropdown = false; onFilterSubmit()"
                     class="px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer font-mono truncate"
                   >
                     {{ f }}
