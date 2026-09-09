@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Azure.Core;
+using Azure.Identity;
 using Azure.ResourceManager;
 using KeyVaultComparer.Api.Models;
 
