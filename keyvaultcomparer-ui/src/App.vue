@@ -1171,7 +1171,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
           </div>
         </div>
 
-        <div v-if="results.length > 0" class="mt-4 border-t border-slate-100 pt-4 flex flex-col xl:flex-row items-center justify-between gap-4 bg-slate-50/50 -mx-6 px-6 -mb-6 pb-6 rounded-b-xl">
+        <div v-if="results.length > 0" class="mt-4 border-t border-slate-100 pt-4 flex flex-col xl:flex-row items-center justify-end gap-4 bg-slate-50/50 -mx-6 px-6 -mb-6 pb-6 rounded-b-xl">
           <div class="flex flex-wrap items-center gap-4">
             <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
               <span class="text-sm text-slate-700 font-medium mr-2">Identicons:</span>
