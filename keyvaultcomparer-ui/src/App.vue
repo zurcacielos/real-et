@@ -824,7 +824,7 @@ const fetchValuesForRow = async (secretName: string) => {
 }
 
 const fetchButtonText = computed(() => {
-  if (loadingValues.value) return 'Fetching...';
+  if (loadingValues.value) return 'Fetching visible...';
   return "Fetch Visible Row's Values";
 });
 
@@ -1243,7 +1243,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
               </div>
               <input 
                 type="text"
-                v-model="uiSettings.nameFilter"
+                v-model.lazy="uiSettings.nameFilter"
                 placeholder="Regex filter (CSV)..."
                 class="w-full border border-slate-300 rounded-lg pl-8 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 @keyup.enter="applyFilter; showHistoryDropdown = false"
