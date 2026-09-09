@@ -220,10 +220,6 @@ const getRelativeTime = (timestamp: number) => {
 };
 
 const totalVaultsCount = ref<number | null>(null);
-const onFilterSubmit = () => {
-  appStore.applySecretNameFilter();
-  fetchComparison();
-};
 
 const availableVaults = ref<DiscoveredVault[]>([])
 const loadingVaults = ref(false)
@@ -1260,7 +1256,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 @input="appStore.setSecretNameFilter(($event.target as HTMLInputElement).value)"
                 placeholder="Regex filter (CSV)..."
                 class="w-full border border-slate-300 rounded-lg pl-8 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                @keyup.enter="onFilterSubmit(); showHistoryDropdown = false"
+                @keyup.enter="appStore.applySecretNameFilter(); showHistoryDropdown = false"
                 @keydown.esc="showHistoryDropdown = false"
                 @focus="showHistoryDropdown = true"
                 @blur="hideHistoryDropdown"
@@ -1270,7 +1266,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                   <li 
                     v-for="f in appStore.availableRecentFilters" 
                     :key="f" 
-                    @mousedown.prevent="appStore.setSecretNameFilter(f); showHistoryDropdown = false; onFilterSubmit()"
+                    @mousedown.prevent="appStore.setSecretNameFilter(f); appStore.applySecretNameFilter(); showHistoryDropdown = false;"
                     class="px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer font-mono truncate"
                   >
                     {{ f }}
