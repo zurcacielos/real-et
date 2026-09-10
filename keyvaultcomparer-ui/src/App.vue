@@ -937,11 +937,7 @@ const filteredResults = computed(() => {
         
         if (appStore.state.inspectionFilter === 'Any') return true;
         
-        const rank: Record<string, number> = { 'Low': 1, 'Medium': 2, 'High': 3, 'Critical': 4 };
-        const valRank = rank[val.highestSeverity] || 0;
-        const filterRank = rank[appStore.state.inspectionFilter as string] || 0;
-        
-        return valRank >= filterRank;
+        return val.inspections?.some(ins => ins.severity === appStore.state.inspectionFilter) || false;
       });
     });
   }
@@ -1533,7 +1529,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                       
                       <span 
                         v-if="row.vaultValues[uri]?.inspections?.length"
-                        class="ml-1.5 cursor-help flex items-center justify-center rounded-full transition-transform hover:scale-110 drop-shadow-sm p-0.5 ring-1 bg-black ring-green-400"
+                        class="ml-1.5 cursor-help flex items-center justify-center rounded-full transition-transform hover:scale-110 drop-shadow-sm w-5 h-5 ring-1 bg-black ring-green-400 shrink-0"
                         :class="{
                           'text-blue-400': row.vaultValues[uri]?.highestSeverity === 'Low',
                           'text-yellow-400': row.vaultValues[uri]?.highestSeverity === 'Medium',
@@ -1542,9 +1538,9 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                         }"
                         :title="(row.vaultValues[uri]?.inspections || []).map(i => `• [${i.severity}] ${i.ruleName}: ${i.message}`).join('\n')"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
-                          <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" clip-rule="evenodd" />
-                        </svg>
+                        <span class="text-[9px] font-bold tracking-wider uppercase leading-none pl-0.5">
+                          {{ row.vaultValues[uri]?.highestSeverity?.substring(0, 2) }}
+                        </span>
                       </span>
                     </span>
                   </div>
