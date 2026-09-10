@@ -1551,15 +1551,15 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                         v-if="row.vaultValues[uri]?.inspections?.length"
                         class="ml-1.5 cursor-help flex items-center justify-center rounded-full transition-transform hover:scale-110 drop-shadow-sm w-5 h-5 ring-1 bg-black ring-green-400 shrink-0"
                         :class="{
-                          'text-blue-400': row.vaultValues[uri]?.highestSeverity === 'Low',
-                          'text-yellow-400': row.vaultValues[uri]?.highestSeverity === 'Medium',
-                          'text-orange-500': row.vaultValues[uri]?.highestSeverity === 'High',
-                          'text-red-500': row.vaultValues[uri]?.highestSeverity === 'Critical'
+                          'text-[#00FFFF]': row.vaultValues[uri]?.highestSeverity === 'Low',
+                          'text-[#FFFF00]': row.vaultValues[uri]?.highestSeverity === 'Medium',
+                          'text-[#FF8800]': row.vaultValues[uri]?.highestSeverity === 'High',
+                          'text-[#FF0000]': row.vaultValues[uri]?.highestSeverity === 'Critical'
                         }"
                         :title="(row.vaultValues[uri]?.inspections || []).map(i => `• [${i.severity}] ${i.ruleName}: ${i.message}`).join('\n')"
                       >
-                        <span class="text-[9px] font-bold tracking-wider uppercase leading-none pl-0.5">
-                          {{ row.vaultValues[uri]?.highestSeverity?.substring(0, 2) }}
+                        <span class="text-[11px] font-black uppercase leading-none mt-[1px]">
+                          {{ row.vaultValues[uri]?.highestSeverity?.substring(0, 1) }}
                         </span>
                       </span>
                     </span>
