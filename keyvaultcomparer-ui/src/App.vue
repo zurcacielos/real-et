@@ -350,11 +350,13 @@ const loadKnownSecretNames = (): Record<string, SecretMetadata[]> => {
     const saved = localStorage.getItem('savedKnownSecretNames');
     if (saved) {
       const parsed = JSON.parse(saved);
+      if (typeof parsed !== 'object' || parsed === null) return {};
       for (const uri in parsed) {
+        if (!Array.isArray(parsed[uri])) continue;
         if (parsed[uri].length > 0 && typeof parsed[uri][0] === 'string') {
           return {}; // Old cache format, reset
         }
-        parsed[uri] = parsed[uri].map((n: SecretMetadata) => ({ ...n, name: n.name.toUpperCase() }));
+        parsed[uri] = parsed[uri].map((n: any) => ({ ...n, name: (n?.name || '').toString().toUpperCase() }));
       }
       return parsed;
     }
@@ -542,7 +544,10 @@ const fetchVaultKeys = async () => {
       const data = await response.json();
       const upperData: Record<string, SecretMetadata[]> = {};
       for (const [uri, names] of Object.entries(data)) {
-        upperData[uri] = (names as SecretMetadata[]).map(n => ({...n, name: n.name.toUpperCase()}));
+        upperData[uri] = (names as any[]).map(n => {
+          if (typeof n === 'string') return { name: n.toUpperCase() } as SecretMetadata;
+          return {...n, name: (n?.name || '').toString().toUpperCase()} as SecretMetadata;
+        });
       }
       knownSecretNames.value = upperData;
     }
@@ -992,6 +997,16 @@ const getValueColor = (colorIndex: number | undefined) => {
 
 
 
+const hasActiveFilters = computed(() => {
+  return uiSettings.value.statusFilter !== 'Any' ||
+         appStore.state.inspectionFilter !== 'None' ||
+         appStore.state.nameFilter !== '' ||
+         uiSettings.value.showStagedOnly ||
+         uiSettings.value.showReusedValues ||
+         uiSettings.value.securityByRow ||
+         uiSettings.value.securityByCol;
+});
+
 const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
   if (!statusObj) return '';
   let baseClass = '';
@@ -1402,7 +1417,8 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
             
             <button 
               @click="clearFilters"
-              class="px-3 h-[34px] flex items-center justify-center text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap"
+              class="px-3 h-[34px] flex items-center justify-center text-sm font-medium transition-colors whitespace-nowrap"
+              :class="hasActiveFilters ? 'text-emerald-700 bg-emerald-50 border-2 border-emerald-500 rounded-lg hover:bg-emerald-100' : 'text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50'"
               title="Save regex, clear all filters"
             >
               Clear Filters
