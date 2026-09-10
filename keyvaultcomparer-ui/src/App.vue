@@ -133,7 +133,6 @@ interface UiSettings {
   statusFilter: 'Any' | '=' | '≠' | 'Missing';
   showReusedValues: boolean;
   showStagedOnly: boolean;
-  enableInspections: boolean;
   securityByRow: boolean;
   securityByCol: boolean;
 }
@@ -146,7 +145,6 @@ const defaultUiSettings: UiSettings = {
   statusFilter: 'Any',
   showReusedValues: false,
   showStagedOnly: false,
-  enableInspections: true,
   securityByRow: false,
   securityByCol: false
 };
@@ -320,14 +318,6 @@ const results = computed<SecretComparisonRow[]>(() => {
         baseStatus.isStaged = true;
       }
       
-      if (uiSettings.value.enableInspections && baseStatus.value) {
-        const { inspections, highestSeverity } = analyzeSecret(name, baseStatus.value);
-        if (inspections.length > 0) {
-          baseStatus.inspections = inspections;
-          baseStatus.highestSeverity = highestSeverity;
-        }
-      }
-      
       row.vaultValues[uri] = baseStatus;
       
       // Calculate identicons based on dimension logic
@@ -354,19 +344,6 @@ const results = computed<SecretComparisonRow[]>(() => {
         }
       }
 
-      // Check vulnerability
-      if (valLower && vulnerableValuesMap.value.has(valLower)) {
-        const usages = vulnerableValuesMap.value.get(valLower);
-        if (!row.vaultValues[uri].inspections) row.vaultValues[uri].inspections = [];
-        row.vaultValues[uri].inspections!.push({
-          ruleName: 'Reused Secret',
-          severity: 'High',
-          message: `Reused in ${usages?.length} secrets: ${usages?.join(', ')}. Click identical values to highlight occurrences.`
-        });
-        if (row.vaultValues[uri].highestSeverity !== 'Critical') {
-          row.vaultValues[uri].highestSeverity = 'High';
-        }
-      }
     });
 
     // Compute color index based on distinct values
@@ -938,6 +915,44 @@ const downloadScript = () => {
   URL.revokeObjectURL(url);
 };
 
+const runInspectionsOnVisible = () => {
+  results.value.forEach(row => {
+    vaultUris.value.forEach(uri => {
+      const currentVal = row.vaultValues[uri];
+      if (currentVal && currentVal.value) {
+        const { inspections, highestSeverity } = analyzeSecret(row.secretName, currentVal.value);
+        
+        const finalInspections = [...inspections];
+        let finalSeverity = highestSeverity;
+
+        const valLower = currentVal.value.toLowerCase();
+        if (vulnerableValuesMap.value.has(valLower)) {
+          const usages = vulnerableValuesMap.value.get(valLower);
+          finalInspections.push({
+            ruleName: 'Reused Secret',
+            severity: 'High',
+            message: `Reused in ${usages?.length} secrets: ${usages?.join(', ')}. Click identical values to highlight occurrences.`
+          });
+          if (finalSeverity !== 'Critical') {
+            finalSeverity = 'High';
+          }
+        }
+
+        // Apply to row
+        currentVal.inspections = finalInspections.length > 0 ? finalInspections : undefined;
+        currentVal.highestSeverity = finalInspections.length > 0 ? finalSeverity : undefined;
+
+        // Apply to cache if it exists
+        const d = vaultData.value[uri]?.[row.secretName];
+        if (d) {
+          d.inspections = currentVal.inspections;
+          d.highestSeverity = currentVal.highestSeverity;
+        }
+      }
+    });
+  });
+};
+
 const filteredResults = computed(() => {
   let res = results.value;
 
@@ -1315,18 +1330,24 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
               <svg v-if="loadingValues" class="animate-spin -ml-1 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
               {{ fetchButtonText }}
             </button>
+            <button 
+              @click="runInspectionsOnVisible" 
+              :disabled="loadingValues || vaultUris.length === 0 || filteredResults.length === 0"
+              class="ml-auto w-full md:w-auto px-6 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              title="Run inspections only on visible rows"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Run Inspections
+            </button>
           </div>
         </div>
 
         <div v-if="results.length > 0" class="mt-4 border-t border-slate-100 pt-4 flex flex-col xl:flex-row items-center justify-end gap-4 bg-slate-50/50 -mx-6 px-6 -mb-6 pb-6 rounded-b-xl">
           <div class="flex flex-wrap items-center gap-4">
             <div class="flex items-center gap-4 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
-              <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer hover:text-slate-900">
-                <input type="checkbox" v-model="uiSettings.enableInspections" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
-                <span class="font-medium">Run Inspections</span>
-              </label>
-              <div class="w-px h-4 bg-slate-200"></div>
-              <span class="text-sm text-slate-700 font-medium">Level:</span>
+              <span class="text-sm text-slate-700 font-medium">Inspection Level:</span>
               <select 
                 :value="appStore.state.inspectionFilter"
                 @change="appStore.setInspectionFilter(($event.target as HTMLSelectElement).value as any)"
