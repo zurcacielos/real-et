@@ -1452,7 +1452,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
             
             <button 
               @click="clearFilters"
-              class="px-3 py-2 h-[34px] text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap"
+              class="px-3 h-[34px] flex items-center justify-center text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap"
               title="Save regex, clear all filters"
             >
               Clear Filters
