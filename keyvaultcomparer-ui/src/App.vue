@@ -473,7 +473,7 @@ watch(selectedSubscriptionId, async (newId) => {
 const clearFilters = () => {
   appStore.applySecretNameFilter();
   appStore.setSecretNameFilter('');
-  appStore.setInspectionFilter('Ignore');
+  appStore.setInspectionFilter('None');
   uiSettings.value.statusFilter = 'Any';
   uiSettings.value.showReusedValues = false;
   uiSettings.value.showStagedOnly = false;
@@ -929,14 +929,19 @@ const filteredResults = computed(() => {
     res = res.filter(r => r.globalStatus === uiSettings.value.statusFilter)
   }
 
-  if (appStore.state.inspectionFilter !== 'Ignore') {
+  if (appStore.state.inspectionFilter !== 'None') {
     res = res.filter(row => {
       return vaultUris.value.some(uri => {
         const val = row.vaultValues[uri];
         if (!val || !val.highestSeverity) return false;
         
         if (appStore.state.inspectionFilter === 'Any') return true;
-        return val.highestSeverity === appStore.state.inspectionFilter;
+        
+        const rank: Record<string, number> = { 'Low': 1, 'Medium': 2, 'High': 3, 'Critical': 4 };
+        const valRank = rank[val.highestSeverity] || 0;
+        const filterRank = rank[appStore.state.inspectionFilter as string] || 0;
+        
+        return valRank >= filterRank;
       });
     });
   }
@@ -1316,7 +1321,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 @change="appStore.setInspectionFilter(($event.target as HTMLSelectElement).value as any)"
                 class="bg-transparent border-none py-0 pl-1 pr-8 text-sm focus:outline-none focus:ring-0 text-slate-700 cursor-pointer"
               >
-                <option value="Ignore">Ignore (All)</option>
+                <option value="None">No Filter</option>
                 <option value="Any">Any Level</option>
                 <option value="Critical">Critical</option>
                 <option value="High">High</option>

@@ -3,7 +3,7 @@ import { reactive } from 'vue';
 const state = reactive({
   recentFilters: JSON.parse(localStorage.getItem('recentFilters') || '[]') as string[],
   nameFilter: '',
-  inspectionFilter: 'Ignore' as 'Ignore' | 'Any' | 'Critical' | 'High' | 'Medium' | 'Low'
+  inspectionFilter: 'None' as 'None' | 'Any' | 'Critical' | 'High' | 'Medium' | 'Low'
 });
 
 export const appStore = reactive({
@@ -19,7 +19,7 @@ export const appStore = reactive({
     state.nameFilter = filterText;
   },
 
-  setInspectionFilter(filterLevel: 'Ignore' | 'Any' | 'Critical' | 'High' | 'Medium' | 'Low') {
+  setInspectionFilter(filterLevel: 'None' | 'Any' | 'Critical' | 'High' | 'Medium' | 'Low') {
     state.inspectionFilter = filterLevel;
   },
 
