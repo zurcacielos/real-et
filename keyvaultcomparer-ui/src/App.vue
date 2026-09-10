@@ -1318,14 +1318,6 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
               </div>
             </div>
             
-            <button 
-              @click="clearFilters"
-              class="px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap"
-              title="Save regex, clear all filters"
-            >
-              Clear Filters
-            </button>
-            
             <div class="flex items-center gap-2">
               <span class="text-sm text-slate-500 font-medium">Limit:</span>
               <select 
@@ -1453,6 +1445,14 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 Show Staged Only
               </label>
             </div>
+            
+            <button 
+              @click="clearFilters"
+              class="px-3 py-2 h-[34px] text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap"
+              title="Save regex, clear all filters"
+            >
+              Clear Filters
+            </button>
           </div>
         </div>
       </div>
