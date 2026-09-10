@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { appStore } from './store'
-import { analyzeSecret, analyzeMetadata, type InspectionResult, type SecretMetadata } from './inspections'
+import { analyzeSecret, analyzeMetadata, calculateEntropy, type InspectionResult, type SecretMetadata } from './inspections'
 
 const currentTab = ref<'dashboard' | 'staged' | 'logs'>('dashboard')
 const showHelpDialog = ref(false)
@@ -404,6 +404,10 @@ const vulnerableValuesMap = computed(() => {
         const lowerName = name.toLowerCase();
         return settings.includeKeyKeywords.some(kw => lowerName.includes(kw));
       });
+
+      if (val.length < 6 || calculateEntropy(val) < 2.0) {
+        continue;
+      }
 
       if (val.length >= settings.minLength || hasCriticalName) {
         vulnerable.set(val, Array.from(names));
