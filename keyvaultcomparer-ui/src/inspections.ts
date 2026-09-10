@@ -4,6 +4,33 @@ export interface InspectionResult {
   message: string;
 }
 
+export interface SecretMetadata {
+  name: string;
+  createdOn: string | null;
+  updatedOn: string | null;
+  expiresOn: string | null;
+}
+
+export const analyzeMetadata = (metadata: SecretMetadata): InspectionResult[] => {
+  const inspections: InspectionResult[] = [];
+  
+  if (!metadata.expiresOn) {
+    inspections.push({ ruleName: 'No Expiration Date', severity: 'Low', message: 'Secret does not have an expiration date set' });
+  }
+
+  if (metadata.updatedOn) {
+    const updatedDate = new Date(metadata.updatedOn);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - updatedDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    if (diffDays > 180) {
+      inspections.push({ ruleName: 'Stale Secret', severity: 'Medium', message: `Secret has not been updated in ${diffDays} days (> 180 days)` });
+    }
+  }
+
+  return inspections;
+};
+
 export const calculateEntropy = (str: string): number => {
   if (!str) return 0;
   const len = str.length;

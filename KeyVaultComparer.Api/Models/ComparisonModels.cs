@@ -42,4 +42,12 @@ namespace KeyVaultComparer.Api.Models
         public string Name { get; set; } = string.Empty;
         public string Uri { get; set; } = string.Empty;
     }
+
+    public class SecretMetadata
+    {
+        public string Name { get; set; } = string.Empty;
+        public System.DateTimeOffset? CreatedOn { get; set; }
+        public System.DateTimeOffset? UpdatedOn { get; set; }
+        public System.DateTimeOffset? ExpiresOn { get; set; }
+    }
 }

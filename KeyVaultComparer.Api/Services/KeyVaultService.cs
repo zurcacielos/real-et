@@ -18,18 +18,18 @@ namespace KeyVaultComparer.Api.Services
             _credential = credential;
         }
 
-        public async Task<Dictionary<string, List<string>>> GetAllSecretNamesAsync(List<string> vaultUris)
+        public async Task<Dictionary<string, List<SecretMetadata>>> GetAllSecretNamesAsync(List<string> vaultUris)
         {
-            var results = new ConcurrentDictionary<string, List<string>>();
+            var results = new ConcurrentDictionary<string, List<SecretMetadata>>();
 
             if (vaultUris == null || !vaultUris.Any())
             {
-                return new Dictionary<string, List<string>>();
+                return new Dictionary<string, List<SecretMetadata>>();
             }
 
             var propTasks = vaultUris.Select(async uri =>
             {
-                var vaultNames = new List<string>();
+                var vaultNames = new List<SecretMetadata>();
                 try
                 {
                     var client = new SecretClient(new Uri(uri), _credential);
@@ -37,7 +37,13 @@ namespace KeyVaultComparer.Api.Services
                     {
                         if (secretProp.Enabled.GetValueOrDefault())
                         {
-                            vaultNames.Add(secretProp.Name);
+                            vaultNames.Add(new SecretMetadata
+                            {
+                                Name = secretProp.Name,
+                                CreatedOn = secretProp.CreatedOn,
+                                UpdatedOn = secretProp.UpdatedOn,
+                                ExpiresOn = secretProp.ExpiresOn
+                            });
                         }
                     }
                     results[uri] = vaultNames;
@@ -56,7 +62,7 @@ namespace KeyVaultComparer.Api.Services
 
             await Task.WhenAll(propTasks);
             
-            return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.OrderBy(n => n).ToList());
+            return results.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.OrderBy(n => n.Name).ToList());
         }
 
         public async Task<Dictionary<string, SecretValueStatus>> GetSecretValuesAsync(string vaultUri, List<string> secretNames)

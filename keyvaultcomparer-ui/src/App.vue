@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { appStore } from './store'
-import { analyzeSecret, type InspectionResult } from './inspections'
+import { analyzeSecret, analyzeMetadata, type InspectionResult, type SecretMetadata } from './inspections'
 
 const currentTab = ref<'dashboard' | 'staged' | 'logs'>('dashboard')
 const showHelpDialog = ref(false)
@@ -228,9 +228,10 @@ const results = computed<SecretComparisonRow[]>(() => {
     
     vaultUris.value.forEach(uri => {
       const knownNamesForVault = knownSecretNames.value[uri] || [];
+      const vaultMetaForName = knownNamesForVault.find(k => k.name === name);
       let baseStatus: SecretValueStatus;
       
-      if (!knownNamesForVault.includes(name)) {
+      if (!vaultMetaForName) {
         baseStatus = { status: 'Missing', value: null, colorIndex: 0 };
       } else {
         const d = vaultData.value[uri]?.[name];
@@ -344,20 +345,23 @@ const toggleHighlight = (val: string | null | undefined) => {
   highlightedValue.value = highlightedValue.value === val ? null : val
 }
 
-const loadKnownSecretNames = (): Record<string, string[]> => {
+const loadKnownSecretNames = (): Record<string, SecretMetadata[]> => {
   try {
     const saved = localStorage.getItem('savedKnownSecretNames');
     if (saved) {
       const parsed = JSON.parse(saved);
       for (const uri in parsed) {
-        parsed[uri] = parsed[uri].map((n: string) => n.toUpperCase());
+        if (parsed[uri].length > 0 && typeof parsed[uri][0] === 'string') {
+          return {}; // Old cache format, reset
+        }
+        parsed[uri] = parsed[uri].map((n: SecretMetadata) => ({ ...n, name: n.name.toUpperCase() }));
       }
       return parsed;
     }
   } catch (e) { return {}; }
   return {};
 };
-const knownSecretNames = ref<Record<string, string[]>>(loadKnownSecretNames())
+const knownSecretNames = ref<Record<string, SecretMetadata[]>>(loadKnownSecretNames())
 watch(knownSecretNames, (newVal) => {
   localStorage.setItem('savedKnownSecretNames', JSON.stringify(newVal));
 }, { deep: true });
@@ -508,7 +512,7 @@ const refetchNames = async () => {
     const data = await response.json();
     
     for (const [uri, names] of Object.entries(data)) {
-      knownSecretNames.value[uri] = (names as string[]).map(n => n.toUpperCase());
+      knownSecretNames.value[uri] = (names as SecretMetadata[]).map(n => ({...n, name: n.name.toUpperCase()}));
     }
   } catch (error) {
     console.error('Error fetching names:', error);
@@ -532,9 +536,9 @@ const fetchVaultKeys = async () => {
     });
     if (response.ok) {
       const data = await response.json();
-      const upperData: Record<string, string[]> = {};
+      const upperData: Record<string, SecretMetadata[]> = {};
       for (const [uri, names] of Object.entries(data)) {
-        upperData[uri] = (names as string[]).map(n => n.toUpperCase());
+        upperData[uri] = (names as SecretMetadata[]).map(n => ({...n, name: n.name.toUpperCase()}));
       }
       knownSecretNames.value = upperData;
     }
@@ -549,7 +553,7 @@ watch(vaultUris, () => {
 
 const allSortedNames = computed(() => {
   const set = new Set<string>();
-  Object.values(knownSecretNames.value).flat().forEach(n => set.add(n));
+  Object.values(knownSecretNames.value).flat().forEach(n => set.add(n.name));
   return Array.from(set).sort();
 });
 
@@ -855,28 +859,51 @@ const runInspectionsOnVisible = () => {
   results.value.forEach(row => {
     vaultUris.value.forEach(uri => {
       const currentVal = row.vaultValues[uri];
-      if (currentVal && currentVal.value) {
-        const { inspections, highestSeverity } = analyzeSecret(row.secretName, currentVal.value);
-        
-        const finalInspections = [...inspections];
-        let finalSeverity = highestSeverity;
+      if (currentVal && currentVal.status !== 'Missing') {
+        const finalInspections: InspectionResult[] = [];
+        let finalSeverity: 'Low' | 'Medium' | 'High' | 'Critical' | undefined = undefined;
 
-        const valLower = currentVal.value.toLowerCase();
-        if (vulnerableValuesMap.value.has(valLower)) {
-          const usages = vulnerableValuesMap.value.get(valLower);
-          finalInspections.push({
-            ruleName: 'Reused Secret',
-            severity: 'High',
-            message: `Reused in ${usages?.length} secrets: ${usages?.join(', ')}. Click identical values to highlight occurrences.`
-          });
-          if (finalSeverity !== 'Critical') {
-            finalSeverity = 'High';
+        if (currentVal.value !== null) {
+          const { inspections, highestSeverity } = analyzeSecret(row.secretName, currentVal.value);
+          finalInspections.push(...inspections);
+          finalSeverity = highestSeverity;
+
+          const valLower = currentVal.value.toLowerCase();
+          if (vulnerableValuesMap.value.has(valLower)) {
+            const usages = vulnerableValuesMap.value.get(valLower);
+            finalInspections.push({
+              ruleName: 'Reused Secret',
+              severity: 'High',
+              message: `Reused in ${usages?.length} secrets: ${usages?.join(', ')}. Click identical values to highlight occurrences.`
+            });
+            if (finalSeverity !== 'Critical') {
+              finalSeverity = 'High';
+            }
           }
         }
 
-        // Apply to row
-        currentVal.inspections = finalInspections.length > 0 ? finalInspections : undefined;
-        currentVal.highestSeverity = finalInspections.length > 0 ? finalSeverity : undefined;
+        const metadata = (knownSecretNames.value[uri] || []).find(m => m.name === row.secretName);
+        if (metadata) {
+          const metaInspections = analyzeMetadata(metadata);
+          finalInspections.push(...metaInspections);
+        }
+
+        if (finalInspections.length > 0) {
+          const severityScore = { 'Low': 1, 'Medium': 2, 'High': 3, 'Critical': 4 };
+          let maxScore = 0;
+          for (const ins of finalInspections) {
+            const score = severityScore[ins.severity];
+            if (score > maxScore) {
+              maxScore = score;
+              finalSeverity = ins.severity;
+            }
+          }
+          currentVal.inspections = finalInspections;
+          currentVal.highestSeverity = finalSeverity;
+        } else {
+          currentVal.inspections = undefined;
+          currentVal.highestSeverity = undefined;
+        }
 
         // Apply to cache if it exists
         const d = vaultData.value[uri]?.[row.secretName];
