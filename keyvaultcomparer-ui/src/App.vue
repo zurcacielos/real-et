@@ -1555,11 +1555,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                     </span>
                     <span v-else class="font-mono tracking-widest font-semibold flex items-center gap-2 px-1.5 py-0.5 rounded transition-all duration-200" :class="[uiSettings.identicolorMode === 'ByRow' ? getValueColor(row.vaultValues[uri]?.colorIndex) : '', {'bg-yellow-100 ring-2 ring-yellow-400 shadow-sm': highlightedValue === row.vaultValues[uri]?.value}]">
                       <template v-if="visibleSecrets.has(row.secretName)">
-                        <span class="tracking-normal block max-w-[250px] overflow-x-auto align-bottom secret-scroll pb-0.5" 
-                              :class="{
-                                'underline decoration-wavy decoration-rose-500 decoration-2 underline-offset-4': row.vaultValues[uri]?.highestSeverity === 'Critical',
-                                'underline decoration-wavy decoration-orange-400 decoration-2 underline-offset-4': row.vaultValues[uri]?.highestSeverity === 'High'
-                              }">{{ row.vaultValues[uri]?.value }}</span>
+                        <span class="tracking-normal block max-w-[250px] overflow-x-auto align-bottom secret-scroll pb-0.5">{{ row.vaultValues[uri]?.value }}</span>
                         <span 
                           v-if="row.vaultValues[uri]?.identiconEmoji"  
                           class="cursor-pointer hover:scale-125 transition-transform text-lg drop-shadow-sm ml-1"
@@ -1570,11 +1566,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                         </span>
                       </template>
                       <template v-else>
-                        <span class="block max-w-[250px] overflow-x-auto align-bottom secret-scroll pb-0.5" 
-                              :class="{
-                                'underline decoration-wavy decoration-rose-500 decoration-2 underline-offset-4': row.vaultValues[uri]?.highestSeverity === 'Critical',
-                                'underline decoration-wavy decoration-orange-400 decoration-2 underline-offset-4': row.vaultValues[uri]?.highestSeverity === 'High'
-                              }">******</span>
+                        <span class="block max-w-[250px] overflow-x-auto align-bottom secret-scroll pb-0.5">******</span>
                         <span 
                           v-if="row.vaultValues[uri]?.identiconEmoji" 
                           class="cursor-pointer hover:scale-125 transition-transform text-lg drop-shadow-sm ml-1"
@@ -1587,10 +1579,10 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                       
                       <span 
                         v-if="row.vaultValues[uri]?.inspections?.length"
-                        class="ml-1.5 cursor-help flex items-center justify-center rounded-full transition-transform hover:scale-110 drop-shadow-sm"
+                        class="ml-1.5 cursor-help flex items-center justify-center rounded-full transition-transform hover:scale-110 drop-shadow-sm bg-yellow-100 ring-1 ring-yellow-400 p-0.5"
                         :class="{
-                          'text-yellow-500': row.vaultValues[uri]?.highestSeverity === 'Low' || row.vaultValues[uri]?.highestSeverity === 'Medium',
-                          'text-orange-500': row.vaultValues[uri]?.highestSeverity === 'High',
+                          'text-yellow-600': row.vaultValues[uri]?.highestSeverity === 'Low' || row.vaultValues[uri]?.highestSeverity === 'Medium',
+                          'text-orange-600': row.vaultValues[uri]?.highestSeverity === 'High',
                           'text-rose-600': row.vaultValues[uri]?.highestSeverity === 'Critical'
                         }"
                         :title="(row.vaultValues[uri]?.inspections || []).map(i => `• [${i.severity}] ${i.ruleName}: ${i.message}`).join('\n')"
