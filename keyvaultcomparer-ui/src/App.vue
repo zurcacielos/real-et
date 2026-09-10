@@ -256,6 +256,14 @@ const analyzeSecret = (name: string, value: string): { inspections: InspectionRe
     }
   }
 
+  if (value.startsWith('http://')) {
+    inspections.push({ ruleName: 'Insecure Protocol', severity: 'Medium', message: 'Uses unencrypted HTTP protocol' });
+  }
+
+  if (value !== value.trim() && value.trim().length > 0) {
+    inspections.push({ ruleName: 'Whitespace Detected', severity: 'Low', message: 'Contains leading or trailing whitespace' });
+  }
+
   const nameLower = name.toLowerCase();
   const isPasswordLike = ['password', 'pwd', 'secret', 'key', 'token'].some(k => nameLower.includes(k));
   
