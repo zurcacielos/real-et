@@ -167,7 +167,7 @@ const loadSharableConfig = () => {
     const params = new URLSearchParams(window.location.search);
     const s = params.get('s');
     if (s) {
-      return JSON.parse(atob(s));
+      return JSON.parse(decodeURIComponent(atob(s)));
     }
   } catch (e) {
     console.warn('Failed to parse URL config', e);
@@ -179,7 +179,7 @@ const urlConfig = loadSharableConfig();
 const syncUrl = () => {
   try {
     const payload = { u: uiSettings.value, v: vaultUris.value, f: appStore.state.nameFilter };
-    const encoded = btoa(JSON.stringify(payload));
+    const encoded = btoa(encodeURIComponent(JSON.stringify(payload)));
     const newUrl = new URL(window.location.href);
     newUrl.searchParams.set('s', encoded);
     window.history.replaceState({}, '', newUrl);
@@ -539,6 +539,16 @@ watch(selectedSubscriptionId, async (newId) => {
     } catch(e) {}
   }
 }, { immediate: true })
+
+const clearFilters = () => {
+  appStore.applySecretNameFilter();
+  appStore.setSecretNameFilter('');
+  appStore.setInspectionFilter('Ignore');
+  uiSettings.value.statusFilter = 'Any';
+  uiSettings.value.showReusedValues = false;
+  uiSettings.value.showStagedOnly = false;
+  showHistoryDropdown.value = false;
+};
 
 const fetchComparison = async () => {
   if (vaultUris.value.length === 0) return
@@ -1307,6 +1317,14 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 </ul>
               </div>
             </div>
+            
+            <button 
+              @click="clearFilters"
+              class="px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap"
+              title="Save regex, clear all filters"
+            >
+              Clear Filters
+            </button>
             
             <div class="flex items-center gap-2">
               <span class="text-sm text-slate-500 font-medium">Limit:</span>
