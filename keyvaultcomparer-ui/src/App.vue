@@ -1558,7 +1558,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                         }"
                         :title="(row.vaultValues[uri]?.inspections || []).map(i => `• [${i.severity}] ${i.ruleName}: ${i.message}`).join('\n')"
                       >
-                        <span class="text-[11px] font-black uppercase leading-none mt-[1px]">
+                        <span class="text-[11px] font-bold uppercase leading-none flex items-center justify-center h-full w-full pb-[1px]">
                           {{ row.vaultValues[uri]?.highestSeverity?.substring(0, 1) }}
                         </span>
                       </span>
