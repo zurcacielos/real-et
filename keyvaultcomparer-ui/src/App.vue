@@ -129,7 +129,7 @@ interface UiSettings {
   resultLimit: number;
   identiconsByRow: boolean;
   identiconsByCol: boolean;
-  identicolorMode: 'None' | 'ByRow' | 'Global';
+  colorMatchByRow: boolean;
   statusFilter: 'Any' | '=' | '≠' | 'Missing';
   showReusedValues: boolean;
   showStagedOnly: boolean;
@@ -141,7 +141,7 @@ const defaultUiSettings: UiSettings = {
   resultLimit: 50,
   identiconsByRow: true,
   identiconsByCol: true,
-  identicolorMode: 'ByRow',
+  colorMatchByRow: true,
   statusFilter: 'Any',
   showReusedValues: false,
   showStagedOnly: false,
@@ -1391,15 +1391,11 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                 By Col
               </label>
             </div>
-            <div class="flex items-center gap-2 h-[34px]">
-              <span class="text-sm text-slate-700 font-medium">Identicolor:</span>
-              <select 
-                v-model="uiSettings.identicolorMode" 
-                class="bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-full text-sm focus:outline-none focus:ring-2 focus:ring-slate-300 text-slate-700"
-              >
-                <option value="ByRow">By Row (Matches)</option>
-                <option value="None">None</option>
-              </select>
+            <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 h-[34px]">
+              <label class="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+                <input type="checkbox" v-model="uiSettings.colorMatchByRow" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
+                Color match by row
+              </label>
             </div>
           </div>
 
@@ -1561,7 +1557,7 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                     <span v-else-if="row.vaultValues[uri]?.status === 'Error'" class="text-rose-500 italic text-sm font-medium">
                       Error
                     </span>
-                    <span v-else class="font-mono tracking-widest font-semibold flex items-center gap-2 px-1.5 py-0.5 rounded transition-all duration-200" :class="[uiSettings.identicolorMode === 'ByRow' ? getValueColor(row.vaultValues[uri]?.colorIndex) : '', {'bg-yellow-100 ring-2 ring-yellow-400 shadow-sm': highlightedValue === row.vaultValues[uri]?.value}]">
+                    <span v-else class="font-mono tracking-widest font-semibold flex items-center gap-2 px-1.5 py-0.5 rounded transition-all duration-200" :class="[uiSettings.colorMatchByRow ? getValueColor(row.vaultValues[uri]?.colorIndex) : '', {'bg-yellow-100 ring-2 ring-yellow-400 shadow-sm': highlightedValue === row.vaultValues[uri]?.value}]">
                       <template v-if="visibleSecrets.has(row.secretName)">
                         <span class="tracking-normal block max-w-[250px] overflow-x-auto align-bottom secret-scroll pb-0.5">{{ row.vaultValues[uri]?.value }}</span>
                         <span 
