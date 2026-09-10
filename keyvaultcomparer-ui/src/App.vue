@@ -1583,12 +1583,12 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                       
                       <span 
                         v-if="row.vaultValues[uri]?.inspections?.length"
-                        class="ml-1.5 cursor-help flex items-center justify-center rounded-full transition-transform hover:scale-110 drop-shadow-sm p-0.5 ring-1"
+                        class="ml-1.5 cursor-help flex items-center justify-center rounded-full transition-transform hover:scale-110 drop-shadow-sm p-0.5 ring-1 bg-blue-50 ring-blue-300"
                         :class="{
-                          'bg-blue-50 text-blue-500 ring-blue-300': row.vaultValues[uri]?.highestSeverity === 'Low',
-                          'bg-yellow-50 text-yellow-600 ring-yellow-400': row.vaultValues[uri]?.highestSeverity === 'Medium',
-                          'bg-orange-50 text-orange-600 ring-orange-400': row.vaultValues[uri]?.highestSeverity === 'High',
-                          'bg-rose-50 text-rose-600 ring-rose-300': row.vaultValues[uri]?.highestSeverity === 'Critical'
+                          'text-blue-500': row.vaultValues[uri]?.highestSeverity === 'Low',
+                          'text-yellow-600': row.vaultValues[uri]?.highestSeverity === 'Medium',
+                          'text-orange-600': row.vaultValues[uri]?.highestSeverity === 'High',
+                          'text-rose-600': row.vaultValues[uri]?.highestSeverity === 'Critical'
                         }"
                         :title="(row.vaultValues[uri]?.inspections || []).map(i => `• [${i.severity}] ${i.ruleName}: ${i.message}`).join('\n')"
                       >
