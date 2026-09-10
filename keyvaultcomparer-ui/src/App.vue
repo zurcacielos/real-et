@@ -1585,7 +1585,8 @@ const getCellClasses = (statusObj: SecretValueStatus | undefined) => {
                         v-if="row.vaultValues[uri]?.inspections?.length"
                         class="ml-1.5 cursor-help flex items-center justify-center rounded-full transition-transform hover:scale-110 drop-shadow-sm bg-yellow-100 ring-1 ring-yellow-400 p-0.5"
                         :class="{
-                          'text-yellow-600': row.vaultValues[uri]?.highestSeverity === 'Low' || row.vaultValues[uri]?.highestSeverity === 'Medium',
+                          'text-slate-600': row.vaultValues[uri]?.highestSeverity === 'Low',
+                          'text-yellow-600': row.vaultValues[uri]?.highestSeverity === 'Medium',
                           'text-orange-600': row.vaultValues[uri]?.highestSeverity === 'High',
                           'text-rose-600': row.vaultValues[uri]?.highestSeverity === 'Critical'
                         }"
